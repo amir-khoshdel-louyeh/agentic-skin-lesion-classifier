@@ -1,0 +1,71 @@
+This proposal outlines the development of a sophisticated AI-driven Command Line Interface (CLI) application designed for the automated classification of skin lesions. By integrating local Large Language Models (via Ollama) with the specialized reasoning capabilities of OpenClaw, this system moves beyond simple image classification into the realm of Agentic Clinical Reasoning.
+
+Project Proposal: Agentic Skin Lesion Classifier (ASLC)
+1. Executive Summary
+The goal of this project is to build a high-performance CLI tool that leverages the HAM10000 dataset to identify skin cancer types (MEL, BCC, AKIEC, etc.). Unlike static CNN models, this system employs an AI Agent architecture. It doesn't just "label" an image; it uses a suite of medical tools to cross-reference visual findings with clinical guidelines and scientific literature, providing a transparent and evidenced-based diagnostic suggestion.
+
+2. Technical Architecture
+The system is built on a three-tier architecture:
+
+A. The Brain: Ollama (Local LLM/VLM)
+Core Model: qwen2-vl or llama3.2-vision hosted locally via Ollama.
+
+Role: Performs the initial Vision-Language processing. It translates raw pixel data from the skin lesion images into descriptive clinical features (e.g., "irregular borders," "blue-white veil," "asymmetric pigmentation").
+
+B. The Framework: OpenClaw
+Role: Acts as the Orchestrator. It manages the ReAct (Reasoning and Acting) loop, allowing the agent to "think" before committing to a diagnosis.
+
+Agentic Logic: If the vision model is unsure between BCC and a benign lesion, the agent autonomously decides to call external tools to verify dermatological patterns.
+
+C. The Expertise: OpenClaw Medical Skills & Tools
+The agent will be granted access to specific "Skills" from the repository:
+
+medical-imaging-review: To compare the current lesion’s features against established imaging phenotypes.
+
+tooluniverse-clinical-guidelines: To ensure the diagnostic suggestion aligns with NCCN or WHO standard-of-care criteria.
+
+pubmed-search / biomedical-search: To fetch the latest research if the lesion shows rare or ambiguous characteristics.
+
+clinical-diagnostic-reasoning: A specialized skill to mitigate "AI Hallucinations" by forcing the agent to rule out differential diagnoses systematically.
+
+3. Workflow Implementation
+The CLI application will follow this operational sequence:
+
+Ingestion: User provides a path to an image from the HAM10000 dataset via the CLI.
+
+Visual Feature Extraction: The agent uses the VLM to generate a detailed textual description of the lesion.
+
+Tool Augmentation:
+
+The agent queries clinical-guidelines to see if the features match the "ABCD" criteria.
+
+If the lesion is suspected to be a Melanoma (mel), the agent triggers tooluniverse-precision-oncology to provide context on the severity.
+
+Evidence Synthesis: The agent aggregates tool outputs and visual data.
+
+Final Output: The CLI returns a structured JSON or Markdown report containing:
+
+Predicted Class: (e.g., BCC)
+
+Confidence Score: (%)
+
+Clinical Justification: Why the agent reached this conclusion.
+
+References: Links to the specific medical skills/guidelines used.
+
+4. Key Features & Innovations
+Local & Private: By using Ollama, all patient data (images) stays on the local machine, ensuring HIPAA-compliant potential without cloud exposure.
+
+Explainable AI (XAI): Unlike a "black-box" neural network, this agent provides a step-by-step log of its reasoning process.
+
+Tool-Use Capabilities: The agent can verify if a lesion is "SCC" (even though SCC is missing in HAM10000) by using the biomedical-search tool to look for similar edge cases in the ISIC archive.
+
+5. Success Metrics
+Accuracy: Target >85% alignment with HAM10000 ground truth labels.
+
+Interpretability: 100% of diagnoses must be accompanied by at least two supporting clinical "reasons" extracted via OpenClaw tools.
+
+Latency: Processing from image input to full agentic report in under 30 seconds on consumer-grade GPU hardware.
+
+6. Future Scalability
+The architecture is designed to be "Dataset Agnostic." While it starts with HAM10000, the OpenClaw Medical Skills allow the agent to easily transition to other datasets (like ISIC 2024) or even integrate with Electronic Health Records (EHR) via the fhir-developer-skill.
