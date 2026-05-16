@@ -1,0 +1,83 @@
+# Python virtual environments
+.venv/
+venv/
+env/
+ENV/
+\.env
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+*.pyd
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+*.egg
+
+# Testing
+.coverage
+.coverage.*
+.cache
+.pytest_cache/
+nosetests.xml
+pytestdebug.log
+
+# IDE / editor
+.vscode/
+*.code-workspace
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data and dataset files
+dataset/
+*.csv
+*.h5
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.safetensors
+
+# Model artifacts / outputs
+models/
+model/
+checkpoints/
+outputs/
+output/
+logs/
+*.log
+
+# Local LLM tooling
+ollama/
+*.llama
+*.olm
+*.cache
+
+# Environment files
+.env
+.env.*
+
+# Misc
+coverage.xml
+*.tmp
+*.bak
+*.swp
+
+
+
+plan.md
