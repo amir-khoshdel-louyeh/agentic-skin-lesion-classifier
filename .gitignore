@@ -54,7 +54,6 @@ dataset/
 *.safetensors
 
 # Model artifacts / outputs
-models/
 model/
 checkpoints/
 outputs/
