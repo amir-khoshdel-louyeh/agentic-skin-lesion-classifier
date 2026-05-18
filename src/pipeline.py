@@ -224,6 +224,9 @@ class OperationalPipeline:
         # reset explainability log for this run
         self.explain_log = []
 
+        start_ts = datetime.utcnow()
+        self._log("run_start", "Pipeline run started", evidence={"row_index": row_index})
+
         image = self.ingest(row_index=row_index)
         desc = self.visual_feature_extraction(image, call_model=call_model)
         abcd = self.check_abcd_criteria(desc)
@@ -231,9 +234,14 @@ class OperationalPipeline:
         refs = self.literature_search(desc)
         report = self.evidence_synthesis(desc, abcd, onc, refs)
 
+        end_ts = datetime.utcnow()
+        elapsed = (end_ts - start_ts).total_seconds()
+        self._log("run_end", "Pipeline run finished", evidence={"elapsed_seconds": elapsed})
+
         out = report.to_dict()
         out.update({"abcd": abcd, "oncology_trigger": onc})
         out.update({"explainability_log": self.explain_log})
+        out.update({"timing": {"start_utc": start_ts.isoformat() + "Z", "end_utc": end_ts.isoformat() + "Z", "elapsed_seconds": elapsed}})
         return out
 
 
