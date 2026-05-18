@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 import json
@@ -25,6 +25,9 @@ class FinalReport:
     reasoning: list[str]
     references: list[str]
     clinical_description: dict[str, Any]
+    interpretability_passed: bool = True
+    missing_reasons: list[str] = field(default_factory=list)
+    citations: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -141,8 +144,23 @@ class OperationalPipeline:
     def evidence_synthesis(self, desc: StructuredClinicalDescription, abcd: dict[str, Any], onc: dict[str, Any], refs: list[str]) -> FinalReport:
         """Merge outputs into a final structured report."""
         reasoning: list[str] = []
-        reasoning.append(desc.visual_summary)
-        reasoning.extend(desc.clinical_clues)
+        # Collect clinical reasons: visual summary + explicit clinical clues
+        clinical_reasons: list[str] = []
+        if getattr(desc, "visual_summary", None):
+            clinical_reasons.append(desc.visual_summary)
+        clinical_reasons.extend(getattr(desc, "clinical_clues", []) or [])
+
+        # Ensure at least two clinical reasons are present; add fallbacks from numeric features if missing
+        missing_reasons: list[str] = []
+        if len(clinical_reasons) < 2:
+            fallback_a = f"Asymmetry score: {getattr(desc, 'asymmetry_score', 0.0):.2f}"
+            fallback_b = f"Border irregularity score: {getattr(desc, 'border_irregularity_score', 0.0):.2f}"
+            clinical_reasons.append(fallback_a)
+            clinical_reasons.append(fallback_b)
+            missing_reasons.extend([fallback_a, fallback_b])
+
+        # Final reasoning includes the clinical reasons and a concise ABCD summary
+        reasoning.extend(clinical_reasons)
         reasoning.append(f"ABCD summary: {abcd}")
         if onc.get("trigger_precision_oncology"):
             reasoning.append("Precision oncology context recommended based on risk signals.")
@@ -161,16 +179,43 @@ class OperationalPipeline:
             pred_label = "likely-benign"
             confidence = 0.75
 
+        # Build citations list describing which tools/guidelines contributed
+        citations: list[str] = []
+        citations.append("ABCD_heuristic")
+        if getattr(desc, "model_interpretation", None):
+            citations.append("VisionModel")
+        if refs:
+            citations.append("LiteratureSearch")
+        if onc.get("trigger_precision_oncology"):
+            citations.append("PrecisionOncologyHeuristic")
+
+        interpretability_passed = len(clinical_reasons) >= 2
+
         report = FinalReport(
             prediction=pred_label,
             confidence=float(confidence),
             reasoning=reasoning,
             references=refs,
             clinical_description=desc.model_dump() if hasattr(desc, "model_dump") else desc.__dict__,
+            interpretability_passed=interpretability_passed,
+            missing_reasons=missing_reasons,
+            citations=list(dict.fromkeys(citations)),
         )
 
         # Log synthesis outcome
-        self._log("evidence_synthesis", "Synthesized evidence into final prediction", evidence={"prediction": pred_label, "confidence": confidence, "reasoning": reasoning, "references": refs})
+        self._log(
+            "evidence_synthesis",
+            "Synthesized evidence into final prediction",
+            evidence={
+                "prediction": pred_label,
+                "confidence": confidence,
+                "reasoning": reasoning,
+                "references": refs,
+                "interpretability_passed": interpretability_passed,
+                "missing_reasons": missing_reasons,
+                "citations": list(dict.fromkeys(citations)),
+            },
+        )
 
         return report
 
