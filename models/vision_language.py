@@ -11,6 +11,7 @@ import numpy as np
 from ollama import Client
 from pydantic import BaseModel, Field
 
+from src.config import get_ollama_model_name
 from src.data_utils import (
     HMNIST_RGB_CSV,
     load_hmnist_pixels,
@@ -38,11 +39,12 @@ class OllamaVisionLanguageInterface:
 
     def __init__(
         self,
-        model_name: str = "llama3.2-vision",
+        model_name: str | None = None,
         host: str = "http://127.0.0.1:11434",
         timeout_seconds: int = 120,
     ) -> None:
-        self.model_name = model_name
+        # Allow overriding model via config.yaml or OLLAMA_MODEL env var
+        self.model_name = model_name or get_ollama_model_name()
         self.client = Client(host=host, timeout=timeout_seconds)
 
     def ensure_model_available(self) -> bool:
@@ -70,9 +72,28 @@ class OllamaVisionLanguageInterface:
         try:
             model_list = self.client.list()
             models = model_list.get("models", [])
-            if not any(self.model_name in (m.get("name") or "") for m in models):
+            available = []
+            for m in models:
+                name = m.get("name") or ""
+                mid = m.get("id") or ""
+                available.append((name, mid))
+
+            # flexible matching: exact, contains, or id match
+            found = False
+            for name, mid in available:
+                if not self.model_name:
+                    continue
+                if self.model_name == name or self.model_name == mid:
+                    found = True
+                    break
+                if self.model_name in name or name in self.model_name:
+                    found = True
+                    break
+
+            if not found:
                 ok = False
-                msgs.append(f"Ollama model '{self.model_name}' is not available locally.")
+                avail_str = ", ".join([f"{n} (id={i})" for n, i in available]) or "<none>"
+                msgs.append(f"Ollama model '{self.model_name}' is not available locally. Available models: {avail_str}")
         except Exception as exc:  # noqa: BLE001
             ok = False
             msgs.append(f"Failed to contact Ollama at {self.client.host}: {exc}")

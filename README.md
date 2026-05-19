@@ -7,6 +7,11 @@ Prerequisites
 - `git` and a terminal
 - (Optional) Ollama runtime running locally if you want to call the vision model
 
+Model configuration
+- The Ollama model name is read from `config.yaml` first.
+- To change the model, edit `config.yaml` and update `ollama_model`.
+- The `OLLAMA_MODEL` environment variable still works and overrides the config file.
+
 Quick setup
 1. Create and activate a virtual environment:
 
@@ -40,6 +45,12 @@ python -m cli.run_pipeline 0
 python -m cli.run_pipeline 0 --no-model
 ```
 
+Example `config.yaml`:
+
+```yaml
+ollama_model: llama3:latest
+```
+
 Evaluate accuracy (melanoma vs non-melanoma)
 
 Run with `python -m` to avoid ModuleNotFoundError when importing `src`.
@@ -71,9 +82,10 @@ Making the pipeline dataset-agnostic
 - To run on another dataset (ISIC or custom), implement a `DatasetAdapter` and pass it to `OperationalPipeline`.
 
 Troubleshooting
-- If you see ImportErrors for `ollama` or vision calls fail, either install and run Ollama locally or run with `--no-model` / `--call-model` flags accordingly.
+- If vision calls fail, make sure Ollama is running locally and the model name in `config.yaml` matches one from `ollama list`.
+- If you still want to bypass model calls, use `--no-model`.
 - If CSV loading fails due to large file sync issues in your editor, run scripts from the terminal where files are accessible.
-
+- You can override which local Ollama model is used by editing `config.yaml` or setting `OLLAMA_MODEL`.
 Next steps
 - Add `ISICAdapter` implementation to `src/ingest.py` to support ISIC dataset exports.
 - Replace `src/connectors.py` stubs with real FHIR / literature clients when integrating EHR or PubMed.
