@@ -12,7 +12,7 @@ from datetime import datetime
 import numpy as np
 
 from models.vision_language import OllamaVisionLanguageInterface, StructuredClinicalDescription
-from src.data_utils import load_hmnist_pixels, reconstruct_image_from_row
+from src.ingest import HMNISTAdapter, DatasetAdapter
 
 
 logger = logging.getLogger(__name__)
@@ -47,8 +47,14 @@ class TraceEntry:
 class OperationalPipeline:
     """High-level pipeline implementing the operational sequence described in the plan."""
 
-    def __init__(self, vl_interface: OllamaVisionLanguageInterface | None = None):
+    def __init__(
+        self,
+        vl_interface: OllamaVisionLanguageInterface | None = None,
+        data_adapter: DatasetAdapter | None = None,
+    ):
         self.vl = vl_interface or OllamaVisionLanguageInterface()
+        # default to HMNIST adapter for backwards compatibility
+        self.adapter = data_adapter or HMNISTAdapter()
         self.explain_log: list[dict[str, Any]] = []
 
     def _log(self, step: str, detail: str, evidence: dict[str, Any] | list | None = None) -> None:
@@ -60,12 +66,9 @@ class OperationalPipeline:
             self.explain_log.append({"step": step, "timestamp": datetime.utcnow().isoformat() + "Z", "detail": detail, "evidence": None})
 
     def ingest(self, *, row_index: int) -> np.ndarray:
-        """Ingest HMNIST row and reconstruct RGB image."""
-        df = load_hmnist_pixels()
-        if row_index < 0 or row_index >= len(df):
-            raise IndexError("row_index out of range for HMNIST dataset")
-        image = reconstruct_image_from_row(df.iloc[row_index])
-        self._log("ingest", f"Loaded HMNIST row {row_index}", evidence={"shape": image.shape})
+        """Ingest a dataset row and return an RGB image via the dataset adapter."""
+        image = self.adapter.get_image(row_index)
+        self._log("ingest", f"Loaded dataset row {row_index}", evidence={"shape": image.shape})
         return image
 
     def visual_feature_extraction(self, image: np.ndarray, call_model: bool = True) -> StructuredClinicalDescription:
