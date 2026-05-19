@@ -132,6 +132,19 @@ def main() -> None:
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
+    # If model calls are requested, validate prerequisites once before streaming
+    if args.call_model:
+        from models.vision_language import OllamaVisionLanguageInterface
+
+        vl = OllamaVisionLanguageInterface()
+        ok, msgs = vl.validate_prerequisites()
+        if not ok:
+            print("[prereq] vision model prerequisites not satisfied:")
+            for m in msgs:
+                print(" - ", m)
+            raise SystemExit(1)
+        print("[prereq] vision model ready")
+
     metrics = evaluate(args.csv, max_rows=args.rows, call_model=args.call_model, chunksize=args.chunksize)
 
     print(json.dumps(metrics, indent=2))

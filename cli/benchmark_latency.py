@@ -47,12 +47,21 @@ def main() -> None:
 
     pipeline = OperationalPipeline()
 
+    if args.call_model:
+        ok, msgs = pipeline.vl.validate_prerequisites()
+        if not ok:
+            print("[prereq] vision model prerequisites not satisfied:")
+            for m in msgs:
+                print(" - ", m)
+            raise SystemExit(1)
+        print("[prereq] vision model ready")
+
     wall_times: List[float] = []
     internal_times: List[float] = []
 
     for idx in indices:
         start = time.perf_counter()
-        out = pipeline.run(row_index=idx, call_model=args.call_model)
+        out = pipeline.run(row_index=idx, call_model=args.call_model, verbose=args.call_model)
         end = time.perf_counter()
         wall = end - start
         wall_times.append(wall)

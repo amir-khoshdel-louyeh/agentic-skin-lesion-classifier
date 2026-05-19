@@ -30,32 +30,36 @@ pip install -r requirements.txt
 
 Run the pipeline (single example)
 
+Use module invocation (`python -m`) to ensure local `src` imports resolve correctly.
+
 ```bash
 # Run the pipeline on HMNIST row 0 and print JSON
-python cli/run_pipeline.py 0
+python -m cli.run_pipeline 0
 
 # Run without calling the Ollama vision model (deterministic features only)
-python cli/run_pipeline.py 0 --no-model
+python -m cli.run_pipeline 0 --no-model
 ```
 
 Evaluate accuracy (melanoma vs non-melanoma)
 
+Run with `python -m` to avoid ModuleNotFoundError when importing `src`.
+
 ```bash
 # Stream and evaluate up to 500 rows (conservative melanoma detection)
-python cli/evaluate.py dataset/HAM1000/hmnist_28_28_RGB.csv/hmnist_28_28_RGB.csv --rows 500
+python -m cli.evaluate dataset/HAM1000/hmnist_28_28_RGB.csv/hmnist_28_28_RGB.csv --rows 500
 
 # Include vision model calls (requires Ollama)
-python cli/evaluate.py dataset/HAM1000/hmnist_28_28_RGB.csv/hmnist_28_28_RGB.csv --rows 200 --call-model
+python -m cli.evaluate dataset/HAM1000/hmnist_28_28_RGB.csv/hmnist_28_28_RGB.csv --rows 200 --call-model
 ```
 
 Benchmark latency
 
 ```bash
 # Measure wall-clock and internal pipeline timings for 20 samples
-python cli/benchmark_latency.py --rows 20
+python -m cli.benchmark_latency --rows 20
 
 # Include model calls during benchmarking (will be slower)
-python cli/benchmark_latency.py --rows 10 --call-model
+python -m cli.benchmark_latency --rows 10 --call-model
 ```
 
 Notes on explainability & interpretability

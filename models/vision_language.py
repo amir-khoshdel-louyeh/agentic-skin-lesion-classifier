@@ -51,6 +51,34 @@ class OllamaVisionLanguageInterface:
         models = model_list.get("models", [])
         return any(self.model_name in (model.get("name") or "") for model in models)
 
+    def validate_prerequisites(self) -> tuple[bool, list[str]]:
+        """Check runtime prerequisites for calling the vision model.
+
+        Returns (ok, messages). `ok` is True when all checks pass.
+        """
+        msgs: list[str] = []
+        ok = True
+
+        # Check Pillow
+        try:
+            import PIL  # noqa: F401
+        except Exception:
+            ok = False
+            msgs.append("Pillow (PIL) is not installed. Install via `pip install pillow`.")
+
+        # Check Ollama client connectivity and model availability
+        try:
+            model_list = self.client.list()
+            models = model_list.get("models", [])
+            if not any(self.model_name in (m.get("name") or "") for m in models):
+                ok = False
+                msgs.append(f"Ollama model '{self.model_name}' is not available locally.")
+        except Exception as exc:  # noqa: BLE001
+            ok = False
+            msgs.append(f"Failed to contact Ollama at {self.client.host}: {exc}")
+
+        return ok, msgs
+
     def ingest_hmnist_row(
         self,
         row_index: int,

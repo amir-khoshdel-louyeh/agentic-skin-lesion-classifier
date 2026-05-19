@@ -222,20 +222,34 @@ class OperationalPipeline:
 
         return report
 
-    def run(self, row_index: int, call_model: bool = True) -> dict[str, Any]:
+    def run(self, row_index: int, call_model: bool = True, verbose: bool = False) -> dict[str, Any]:
         """Execute the full pipeline and return a structured dict report."""
         # reset explainability log for this run
         self.explain_log = []
 
         start_ts = datetime.utcnow()
         self._log("run_start", "Pipeline run started", evidence={"row_index": row_index})
+        if verbose:
+            print(f"[pipeline] start row={row_index}")
 
         image = self.ingest(row_index=row_index)
+        if verbose:
+            print("[pipeline] ingested image")
         desc = self.visual_feature_extraction(image, call_model=call_model)
+        if verbose:
+            print("[pipeline] extracted visual features")
         abcd = self.check_abcd_criteria(desc)
+        if verbose:
+            print("[pipeline] checked ABCD criteria")
         onc = self.trigger_oncology_context(abcd, desc)
+        if verbose:
+            print("[pipeline] evaluated oncology trigger")
         refs = self.literature_search(desc)
+        if verbose:
+            print("[pipeline] performed literature search (stub)")
         report = self.evidence_synthesis(desc, abcd, onc, refs)
+        if verbose:
+            print(f"[pipeline] synthesized evidence -> prediction={report.prediction}")
 
         end_ts = datetime.utcnow()
         elapsed = (end_ts - start_ts).total_seconds()
@@ -245,6 +259,8 @@ class OperationalPipeline:
         out.update({"abcd": abcd, "oncology_trigger": onc})
         out.update({"explainability_log": self.explain_log})
         out.update({"timing": {"start_utc": start_ts.isoformat() + "Z", "end_utc": end_ts.isoformat() + "Z", "elapsed_seconds": elapsed}})
+        if verbose:
+            print(f"[pipeline] finished in {elapsed:.2f}s")
         return out
 
 
