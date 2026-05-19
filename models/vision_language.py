@@ -45,6 +45,7 @@ class OllamaVisionLanguageInterface:
     ) -> None:
         # Allow overriding model via config.yaml or OLLAMA_MODEL env var
         self.model_name = model_name or get_ollama_model_name()
+        self.host = host
         self.client = Client(host=host, timeout=timeout_seconds)
 
     def ensure_model_available(self) -> bool:
@@ -96,7 +97,7 @@ class OllamaVisionLanguageInterface:
                 msgs.append(f"Ollama model '{self.model_name}' is not available locally. Available models: {avail_str}")
         except Exception as exc:  # noqa: BLE001
             ok = False
-            msgs.append(f"Failed to contact Ollama at {self.client.host}: {exc}")
+            msgs.append(f"Failed to contact Ollama at {self.host}: {exc}")
 
         return ok, msgs
 

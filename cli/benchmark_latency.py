@@ -1,4 +1,4 @@
-"""Benchmark end-to-end pipeline latency across HMNIST samples."""
+"""Benchmark end-to-end pipeline latency across ISIC samples."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from typing import List
 import pandas as pd
 
 from src.pipeline import OperationalPipeline
-from src.data_utils import load_hmnist_pixels
+from src.ingest import ISICAdapter
 
 
 def compute_stats(samples: List[float]) -> dict:
@@ -28,15 +28,16 @@ def compute_stats(samples: List[float]) -> dict:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Benchmark pipeline latency over HMNIST rows")
+    parser = argparse.ArgumentParser(description="Benchmark pipeline latency over ISIC rows")
+    parser.add_argument("--dataset-root", default="dataset", help="Path to the dataset root containing the ISIC 2019 files.")
     parser.add_argument("--rows", type=int, default=50, help="Number of rows to benchmark")
     parser.add_argument("--start-index", type=int, default=0, help="Start row index")
     parser.add_argument("--call-model", action="store_true", help="Call vision LLM during benchmark")
     parser.add_argument("--shuffle", action="store_true", help="Shuffle rows before sampling")
     args = parser.parse_args()
 
-    df = load_hmnist_pixels()
-    n = len(df)
+    adapter = ISICAdapter(args.dataset_root)
+    n = adapter.n_samples()
     indices = list(range(n))
     if args.shuffle:
         import random
@@ -45,7 +46,7 @@ def main() -> None:
 
     indices = indices[args.start_index : args.start_index + args.rows]
 
-    pipeline = OperationalPipeline()
+    pipeline = OperationalPipeline(data_adapter=adapter)
 
     if args.call_model:
         ok, msgs = pipeline.vl.validate_prerequisites()

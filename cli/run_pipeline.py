@@ -7,17 +7,19 @@ import json
 import logging
 
 from src.pipeline import OperationalPipeline
+from src.ingest import ISICAdapter
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run operational pipeline on an HMNIST row index.")
-    parser.add_argument("row_index", type=int, help="Row index in hmnist CSV to run pipeline on.")
+    parser = argparse.ArgumentParser(description="Run operational pipeline on an ISIC sample index.")
+    parser.add_argument("row_index", type=int, help="Row index in the ISIC training set to run pipeline on.")
+    parser.add_argument("--dataset-root", default="dataset", help="Path to the dataset root containing the ISIC 2019 files.")
     parser.add_argument("--no-model", dest="call_model", action="store_false", help="Do not call the vision LLM; use deterministic features only.")
     parser.add_argument("--verbose", action="store_true", help="Print short progress logs during pipeline run (implies --no-model False if not specified)")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
-    pipeline = OperationalPipeline()
+    pipeline = OperationalPipeline(data_adapter=ISICAdapter(args.dataset_root))
 
     if args.call_model:
         ok, msgs = pipeline.vl.validate_prerequisites()

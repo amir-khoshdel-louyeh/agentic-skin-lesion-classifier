@@ -12,7 +12,8 @@ from datetime import datetime
 import numpy as np
 
 from models.vision_language import OllamaVisionLanguageInterface, StructuredClinicalDescription
-from src.ingest import HMNISTAdapter, DatasetAdapter
+from src.ingest import DatasetAdapter, ISICAdapter
+from src.literature_search import search_literature
 
 
 logger = logging.getLogger(__name__)
@@ -53,8 +54,7 @@ class OperationalPipeline:
         data_adapter: DatasetAdapter | None = None,
     ):
         self.vl = vl_interface or OllamaVisionLanguageInterface()
-        # default to HMNIST adapter for backwards compatibility
-        self.adapter = data_adapter or HMNISTAdapter()
+        self.adapter = data_adapter or ISICAdapter()
         self.explain_log: list[dict[str, Any]] = []
 
     def _log(self, step: str, detail: str, evidence: dict[str, Any] | list | None = None) -> None:
@@ -133,15 +133,40 @@ class OperationalPipeline:
         return onc
 
     def literature_search(self, desc: StructuredClinicalDescription) -> list[str]:
-        """Stubbed literature search: return short references for ambiguous cases.
+        """Query PubMed for real literature references based on clinical features.
 
-        In real deployment this would query PubMed or a biomedical index. Here we
-        return placeholder references when features are high-risk or unusual.
+        Uses the structured clinical description to generate intelligent search queries
+        and fetches actual peer-reviewed literature from PubMed.
         """
         refs: list[str] = []
-        if desc.color_variation_score > 0.4 or desc.asymmetry_score > 0.4:
-            refs.append("PMID:00000001 - Example melanoma review (placeholder)")
-        self._log("literature_search", "Performed literature search (stub)", evidence={"references": refs})
+        try:
+            # Only search if features suggest risk or ambiguity
+            avg_score = (
+                desc.color_variation_score
+                + desc.asymmetry_score
+                + desc.border_irregularity_score
+            ) / 3
+            if avg_score > 0.3 or desc.color_variation_score > 0.4 or desc.asymmetry_score > 0.4:
+                refs = search_literature(
+                    asymmetry=desc.asymmetry_score,
+                    color_variation=desc.color_variation_score,
+                    border_irregularity=desc.border_irregularity_score,
+                    brightness=desc.brightness_score,
+                    max_results=5,
+                )
+        except Exception as exc:
+            logger.warning(f"Literature search failed: {exc}")
+            refs = [f"Literature search unavailable: {exc}"]
+
+        self._log(
+            "literature_search",
+            "Queried PubMed for relevant literature",
+            evidence={"references": refs, "query_features": {
+                "asymmetry": desc.asymmetry_score,
+                "color_variation": desc.color_variation_score,
+                "border_irregularity": desc.border_irregularity_score,
+            }},
+        )
         return refs
 
     def evidence_synthesis(self, desc: StructuredClinicalDescription, abcd: dict[str, Any], onc: dict[str, Any], refs: list[str]) -> FinalReport:

@@ -29,16 +29,17 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-3. Ensure dataset files are present under `dataset/HAM1000/`:
-- `HAM10000_metadata.csv` (metadata)
-- `hmnist_28_28_RGB.csv/hmnist_28_28_RGB.csv` (HMNIST pixel CSV)
+3. Ensure dataset files are present under `dataset/`:
+- `ISIC_2019_Training_Input/` containing the JPG images
+- `ISIC_2019_Training_GroundTruth.csv` (one-hot labels)
+- `ISIC_2019_Training_Metadata.csv` (optional metadata)
 
 Run the pipeline (single example)
 
 Use module invocation (`python -m`) to ensure local `src` imports resolve correctly.
 
 ```bash
-# Run the pipeline on HMNIST row 0 and print JSON
+# Run the pipeline on ISIC sample 0 and print JSON
 python -m cli.run_pipeline 0
 
 # Run without calling the Ollama vision model (deterministic features only)
@@ -57,10 +58,10 @@ Run with `python -m` to avoid ModuleNotFoundError when importing `src`.
 
 ```bash
 # Stream and evaluate up to 500 rows (conservative melanoma detection)
-python -m cli.evaluate dataset/HAM1000/hmnist_28_28_RGB.csv/hmnist_28_28_RGB.csv --rows 500
+python -m cli.evaluate dataset --rows 0 500
 
 # Include vision model calls (requires Ollama)
-python -m cli.evaluate dataset/HAM1000/hmnist_28_28_RGB.csv/hmnist_28_28_RGB.csv --rows 200 --call-model
+python -m cli.evaluate dataset --rows 0 200 --call-model
 ```
 
 Benchmark latency
@@ -78,8 +79,8 @@ Notes on explainability & interpretability
 - See `src/pipeline.py` for logging step names and how reasoning is synthesized.
 
 Making the pipeline dataset-agnostic
-- The ingestion API is implemented in `src/ingest.py` with `DatasetAdapter` and `HMNISTAdapter`.
-- To run on another dataset (ISIC or custom), implement a `DatasetAdapter` and pass it to `OperationalPipeline`.
+- The ingestion API is implemented in `src/ingest.py` with `DatasetAdapter` and `ISICAdapter`.
+- To run on another dataset, implement a `DatasetAdapter` and pass it to `OperationalPipeline`.
 
 Troubleshooting
 - If vision calls fail, make sure Ollama is running locally and the model name in `config.yaml` matches one from `ollama list`.
@@ -87,7 +88,6 @@ Troubleshooting
 - If CSV loading fails due to large file sync issues in your editor, run scripts from the terminal where files are accessible.
 - You can override which local Ollama model is used by editing `config.yaml` or setting `OLLAMA_MODEL`.
 Next steps
-- Add `ISICAdapter` implementation to `src/ingest.py` to support ISIC dataset exports.
 - Replace `src/connectors.py` stubs with real FHIR / literature clients when integrating EHR or PubMed.
 
 License & Safety
