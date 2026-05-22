@@ -1,94 +1,247 @@
-# Agentic Skin Lesion Classifier — Run & Test Guide
+# 🧠 Agentic Skin Lesion Classifier
+A hybrid AI system combining:
+- 🧩 OpenClaw (agent orchestration)
+- 🦙 Ollama (local LLM reasoning)
+- 🧬 CNN models (medical image classification)
+- 🔬 Federated-ready architecture (future extension)
 
-This file describes how to set up the environment, run the pipeline, and run included tests/benchmarks.
+This system separates:
+- reasoning (LLM)
+- perception (CNN)
+- orchestration (agent layer)
 
-Prerequisites
-- Python 3.10+ (recommended 3.11)
-- `git` and a terminal
-- (Optional) Ollama runtime running locally if you want to call the vision model
+---
 
-Model configuration
-- The Ollama model name is read from `config.yaml` first.
-- To change the model, edit `config.yaml` and update `ollama_model`.
-- The `OLLAMA_MODEL` environment variable still works and overrides the config file.
+# 🏗️ System Architecture
 
-Quick setup
-1. Create and activate a virtual environment:
+```
+User Image
+   ↓
+OpenClaw Agent (qwen2.5 / llama3.2)
+   ↓ tool call
+Python CNN API (FastAPI)
+   ↓
+PyTorch pretrained models (ISIC / HAM10000)
+   ↓
+Prediction JSON
+   ↓
+LLM explanation + report
+```
+
+---
+
+# ⚙️ Prerequisites
+
+## System requirements
+- Windows 10/11 or WSL2 (recommended)
+- Python 3.10–3.11
+- Node.js (for OpenClaw)
+- Ollama installed locally
+
+---
+
+## Install Ollama
+
+https://ollama.com/download
+
+Pull a model:
+
+```bash
+ollama pull qwen2.5:7b
+```
+
+(Optional vision testing)
+
+```bash
+ollama pull llama3.2-vision
+```
+
+---
+
+## Install OpenClaw
+
+```bash
+npm install -g openclaw
+```
+
+Verify:
+
+```bash
+openclaw --version
+```
+
+---
+
+# 🧠 OpenClaw Setup
+
+Run gateway:
+
+```powershell
+openclaw gateway run
+```
+
+Open dashboard:
+
+```powershell
+openclaw dashboard
+```
+
+Approve device if required:
+
+```powershell
+openclaw devices list
+openclaw devices approve <device-id>
+```
+
+---
+
+# 🐍 Python Environment (CNN Layer Only)
+
+Create venv:
 
 ```bash
 python -m venv .venv
-# Windows
-.venv\Scripts\Activate.ps1  # or Activate.bat
-# macOS / Linux
-source .venv/bin/activate
 ```
 
-2. Install dependencies:
+Activate:
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+Install dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-3. Ensure dataset files are present under `dataset/`:
-- `ISIC_2019_Training_Input/` containing the JPG images
-- `ISIC_2019_Training_GroundTruth.csv` (one-hot labels)
-- `ISIC_2019_Training_Metadata.csv` (optional metadata)
+---
 
-Run the pipeline (single example)
+# 📦 requirements.txt
 
-Use module invocation (`python -m`) to ensure local `src` imports resolve correctly.
+```txt
+numpy>=1.26,<3.0
+pandas>=2.2,<3.0
+pillow>=10.3,<11.0
+torch>=2.2
+torchvision>=0.17
+fastapi>=0.110
+uvicorn>=0.27
+scikit-learn>=1.4
+opencv-python>=4.9
+albumentations>=1.4
+```
+
+---
+
+# 🚀 Running the System
+
+## 1. Start OpenClaw + Ollama
+
+```powershell
+run_openclaw.ps1
+```
+
+---
+
+## 2. Start CNN API
 
 ```bash
-# Run the pipeline on ISIC sample 0 and print JSON
-python -m cli.run_pipeline 0
-
-# Run without calling the Ollama vision model (deterministic features only)
-python -m cli.run_pipeline 0 --no-model
+python run_cnn.py
 ```
 
-Example `config.yaml`:
+Runs:
 
-```yaml
-ollama_model: llama3:latest
-```
+http://127.0.0.1:8000/predict
 
-Evaluate accuracy (melanoma vs non-melanoma)
+---
 
-Run with `python -m` to avoid ModuleNotFoundError when importing `src`.
+## 3. Test CNN API
 
 ```bash
-# Stream and evaluate up to 500 rows (conservative melanoma detection)
-python -m cli.evaluate dataset --rows 0 500
-
-# Include vision model calls (requires Ollama)
-python -m cli.evaluate dataset --rows 0 200 --call-model
+curl -X POST http://127.0.0.1:8000/predict -F "file=@test.jpg"
 ```
 
-Benchmark latency
+---
 
+# 🧠 Agent Behavior
+
+OpenClaw agent:
+- decides when to call CNN tool
+- does NOT classify directly
+- only interprets results
+
+---
+
+# ⚠️ Critical Rule
+
+❌ Wrong: LLM predicts cancer directly
+
+✔ Correct: CNN predicts → LLM explains
+
+---
+
+# 🧬 Dataset
+
+Supported:
+- ISIC 2019
+- HAM10000
+
+Structure:
+
+```
+dataset/
+ ├── images/
+ ├── metadata.csv
+ └── labels.csv
+```
+
+---
+
+# 🔬 Extensibility
+
+Future upgrades:
+- Federated learning (Flower)
+- Multi-agent voting system
+- SHAP / GradCAM explainability
+- Multi-hospital architecture
+
+---
+
+# 🚨 Debugging
+
+OpenClaw:
 ```bash
-# Measure wall-clock and internal pipeline timings for 20 samples
-python -m cli.benchmark_latency --rows 20
-
-# Include model calls during benchmarking (will be slower)
-python -m cli.benchmark_latency --rows 10 --call-model
+openclaw gateway status
 ```
 
-Notes on explainability & interpretability
-- The pipeline logs an `explainability_log` per run and includes `interpretability_passed` and `citations` in the final report.
-- See `src/pipeline.py` for logging step names and how reasoning is synthesized.
+Ollama:
+```bash
+ollama ps
+```
 
-Making the pipeline dataset-agnostic
-- The ingestion API is implemented in `src/ingest.py` with `DatasetAdapter` and `ISICAdapter`.
-- To run on another dataset, implement a `DatasetAdapter` and pass it to `OperationalPipeline`.
+CNN API:
+```bash
+curl http://127.0.0.1:8000/docs
+```
 
-Troubleshooting
-- If vision calls fail, make sure Ollama is running locally and the model name in `config.yaml` matches one from `ollama list`.
-- If you still want to bypass model calls, use `--no-model`.
-- If CSV loading fails due to large file sync issues in your editor, run scripts from the terminal where files are accessible.
-- You can override which local Ollama model is used by editing `config.yaml` or setting `OLLAMA_MODEL`.
-Next steps
-- Replace `src/connectors.py` stubs with real FHIR / literature clients when integrating EHR or PubMed.
+---
 
-License & Safety
-- This repository provides research code and heuristics; it is not clinical-grade software. Do not use for diagnosis without clinical validation.
+# 🧠 Recommended Stack
+
+| Layer | Tech |
+|------|------|
+| Orchestration | OpenClaw |
+| LLM | Ollama |
+| Vision (optional) | llama3.2-vision |
+| CNN inference | PyTorch |
+| API layer | FastAPI |
+
+---
+
+# 📜 License & Safety
+
+⚠️ Research use only
+⚠️ Not clinically validated
+⚠️ Not for medical diagnosis
+
