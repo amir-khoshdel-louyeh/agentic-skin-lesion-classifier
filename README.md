@@ -1,56 +1,51 @@
-# 🧠 Agentic Skin Lesion Classifier
+﻿# 🧠 Agentic Skin Lesion Classifier
+
 A hybrid AI system combining:
 - 🧩 OpenClaw (agent orchestration)
-- 🦙 Ollama (local LLM reasoning)
-- 🧬 CNN models (medical image classification)
+- 🦙 Ollama (local LLM reasoning & deterministic medical analysis)
+- 🧬 CNN models (medical image classification via PyTorch + FastAPI)
 - 🔬 Federated-ready architecture (future extension)
 
-This system separates:
-- reasoning (LLM)
-- perception (CNN)
-- orchestration (agent layer)
+This system separates **reasoning** (LLM), **perception** (CNN), and **orchestration** (agent layer).
 
 ---
 
-# 🏗️ System Architecture
+## 🏗️ System Architecture
 
 ```
-User Image
-   ↓
-OpenClaw Agent (qwen2.5 / llama3.2)
-   ↓ tool call
-Python CNN API (FastAPI)
-   ↓
-PyTorch pretrained models (ISIC / HAM10000)
-   ↓
-Prediction JSON
-   ↓
-LLM explanation + report
+     [ User Image ]
+           ↓
+[ Python CNN API (FastAPI) ] ──(Inference)──> [ PyTorch Pretrained Models (ISIC/HAM10000) ]
+           ↓
+      [ Prediction JSON ]
+           ↓
+[ Ollama Local LLM (Qwen 2.5) ] ──(Deterministic Parameters)──> [ Low-Temperature Medical Analysis ]
+           ↓
+      [ Final Report ]
 ```
 
 ---
 
-# ⚙️ Prerequisites
+## ⚙️ Prerequisites
 
-## System requirements
-- Windows 10/11 or WSL2 (recommended)
+### System Requirements
+- Windows 10/11 or WSL2
 - Python 3.10–3.11
-- Node.js (for OpenClaw)
+- Node.js & npm (for OpenClaw gateway runtime)
 - Ollama installed locally
 
 ---
 
-## Install Ollama
+## 1. Install & Pull LLM Models
 
-https://ollama.com/download
-
-Pull a model:
+1. Install Ollama from https://ollama.com/download
+2. Pull the primary reasoning model:
 
 ```bash
 ollama pull qwen2.5:7b
 ```
 
-(Optional vision testing)
+Optional vision model for testing:
 
 ```bash
 ollama pull llama3.2-vision
@@ -58,68 +53,29 @@ ollama pull llama3.2-vision
 
 ---
 
-## Install OpenClaw
+## 2. OpenClaw Gateway Setup
+
+Ensure Node.js is installed, then install the OpenClaw core globally:
 
 ```bash
 npm install -g openclaw
 ```
 
-Verify:
-
-```bash
-openclaw --version
-```
-
 ---
 
-# 🧠 OpenClaw Setup
+## 3. Python Environment (CNN Layer)
 
-Run gateway:
-
-```powershell
-openclaw gateway run
-```
-
-Open dashboard:
+Create and activate the virtual environment inside the repository:
 
 ```powershell
-openclaw dashboard
-```
-
-Approve device if required:
-
-```powershell
-openclaw devices list
-openclaw devices approve <device-id>
-```
-
----
-
-# 🐍 Python Environment (CNN Layer Only)
-
-Create venv:
-
-```bash
 python -m venv .venv
-```
-
-Activate:
-
-```powershell
 .venv\Scripts\Activate.ps1
-```
-
-Install dependencies:
-
-```bash
 pip install -r requirements.txt
 ```
 
----
+### requirements.txt
 
-# 📦 requirements.txt
-
-```txt
+```text
 numpy>=1.26,<3.0
 pandas>=2.2,<3.0
 pillow>=10.3,<11.0
@@ -130,118 +86,104 @@ uvicorn>=0.27
 scikit-learn>=1.4
 opencv-python>=4.9
 albumentations>=1.4
+requests>=2.31.0
 ```
 
 ---
 
-# 🚀 Running the System
+## 🚀 Running the System
 
-## 1. Start OpenClaw + Ollama
+### Step 1: Start the Core Infrastructure
+
+Use the provided PowerShell launcher to start Ollama and the OpenClaw gateway safely.
+
+1. Open `run_openclaw.ps1`
+2. Update `$OPENCLAW_DIR` to your OpenClaw runtime folder
+3. Run:
 
 ```powershell
-run_openclaw.ps1
+.\run_openclaw.ps1
 ```
 
----
+This script manages isolated background execution for Ollama and the OpenClaw Node gateway, and provides a small command shell for graceful shutdown.
 
-## 2. Start CNN API
+### Step 2: Start the Local CNN Service
+
+In the activated `.venv` session, start the FastAPI service:
 
 ```bash
-python run_cnn.py
+python skin_agent.py
 ```
 
-Runs:
+The server listens at `http://127.0.0.1:8000/analyze`.
 
-http://127.0.0.1:8000/predict
+### Step 3: Execute the Pipeline
 
----
-
-## 3. Test CNN API
+Run the top-level pipeline controller:
 
 ```bash
-curl -X POST http://127.0.0.1:8000/predict -F "file=@test.jpg"
+python run_pipeline.py
 ```
 
 ---
 
-# 🧠 Agent Behavior
+## 🧠 Deterministic LLM Logic
 
-OpenClaw agent:
-- decides when to call CNN tool
-- does NOT classify directly
-- only interprets results
+### Clinical Guideline
 
----
+- ❌ Incorrect: Letting the LLM predict cancer probabilities directly.
+- ✔️ Correct: Let the CNN handle visual perception, then give the LLM numeric results for calibrated analysis.
 
-# ⚠️ Critical Rule
+The pipeline is designed to avoid hallucinations by using deterministic prompt structures and low-temperature settings.
 
-❌ Wrong: LLM predicts cancer directly
+Example payload:
 
-✔ Correct: CNN predicts → LLM explains
-
----
-
-# 🧬 Dataset
-
-Supported:
-- ISIC 2019
-- HAM10000
-
-Structure:
-
+```python
+payload = {
+    "model": "qwen2.5:7b",
+    "prompt": prompt_for_llm,
+    "system": "You are an expert dermatopathologist. Provide a highly professional, calm, reassuring, and scientifically accurate response in English. Clearly state that these are AI predictions.",
+    "stream": False,
+    "options": {
+        "temperature": 0.1,
+        "top_p": 0.9,
+    }
+}
 ```
+
+---
+
+## 🧬 Data & Extensibility
+
+### Dataset Structure
+
+Supported source distributions include ISIC 2019 and HAM10000:
+
+```text
 dataset/
  ├── images/
  ├── metadata.csv
  └── labels.csv
 ```
 
----
+### Future Upgrades
 
-# 🔬 Extensibility
-
-Future upgrades:
-- Federated learning (Flower)
-- Multi-agent voting system
-- SHAP / GradCAM explainability
-- Multi-hospital architecture
+- Federated infrastructure via Flower or similar frameworks
+- Explainability layers with SHAP / GradCAM visualization
+- Multi-agent consensus loops combining transformer and CNN perception
 
 ---
 
-# 🚨 Debugging
+## 🚨 Debugging Guide
 
-OpenClaw:
-```bash
-openclaw gateway status
-```
-
-Ollama:
-```bash
-ollama ps
-```
-
-CNN API:
-```bash
-curl http://127.0.0.1:8000/docs
-```
+| Issue | Verification | Target | Notes |
+|---|---|---|---|
+| WinError 10061 | `ollama ps` or verify port `11434` | Ollama Core Engine | Ensure Ollama is running |
+| 404 Not Found | Query endpoint layout | OpenClaw / Ollama API | Confirm correct `/api/generate` URL |
+| Invalid config | Validate `~/.openclaw/openclaw.json` | OpenClaw gateway settings | Check path and syntax |
 
 ---
 
-# 🧠 Recommended Stack
+## 📜 License & Safety
 
-| Layer | Tech |
-|------|------|
-| Orchestration | OpenClaw |
-| LLM | Ollama |
-| Vision (optional) | llama3.2-vision |
-| CNN inference | PyTorch |
-| API layer | FastAPI |
-
----
-
-# 📜 License & Safety
-
-⚠️ Research use only
-⚠️ Not clinically validated
-⚠️ Not for medical diagnosis
-
+This system is for academic evaluation only. It is not clinically validated, not certified for medical diagnostics, and should never replace examination or biopsy review by a licensed dermatologist.
