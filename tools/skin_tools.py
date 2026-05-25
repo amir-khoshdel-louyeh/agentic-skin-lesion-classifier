@@ -4,13 +4,38 @@ from pathlib import Path
 from core import analyze_skin_lesion
 
 
+def validate_image_path(image_path: str) -> dict:
+    path = Path(image_path)
+    if not path.exists():
+        return {
+            "status": "error",
+            "message": f"Image not found at: {image_path}"
+        }
+    if not path.is_file():
+        return {
+            "status": "error",
+            "message": f"Path exists but is not a file: {image_path}"
+        }
+    return {"status": "ok"}
+
+
 def analyze_command(args: argparse.Namespace) -> int:
+    validation = validate_image_path(args.image_path)
+    if validation["status"] != "ok":
+        print(json.dumps(validation, indent=2, ensure_ascii=False))
+        return 1
+
     result = analyze_skin_lesion(args.image_path, args.model_tier)
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0 if result.get("status") == "success" else 1
 
 
 def escalate_command(args: argparse.Namespace) -> int:
+    validation = validate_image_path(args.image_path)
+    if validation["status"] != "ok":
+        print(json.dumps(validation, indent=2, ensure_ascii=False))
+        return 1
+
     first = analyze_skin_lesion(args.image_path, "tier1_fast")
     output = {"tier1_result": first}
 
