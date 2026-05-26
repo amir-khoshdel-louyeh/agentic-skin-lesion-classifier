@@ -1,6 +1,6 @@
 # core/processors.py
 import os
-from PIL import Image
+from PIL import Image, ImageOps
 from torchvision import transforms
 
 class ImageProcessor:
@@ -13,8 +13,9 @@ class ImageProcessor:
         if not os.path.exists(image_path):
             raise FileNotFoundError(f"Image not found at: {image_path}")
             
-        # باز کردن تصویر
-        image = Image.open(image_path).convert('RGB')
+        # باز کردن تصویر و تصحیح جهت بر اساس EXIF
+        image = Image.open(image_path)
+        image = ImageOps.exif_transpose(image).convert('RGB')
         
         # خط لوله پردازش متناسب با مدل‌های Pre-trained
         transform_pipeline = transforms.Compose([
