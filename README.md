@@ -124,6 +124,8 @@ You can also invoke the wrapper tool directly for prediction or validation:
 ```bash
 python tools/skin_tools.py analyze --image data/sample_lesion.jpg --model-tier tier1_fast
 python tools/skin_tools.py predict --image data/sample_lesion.jpg --model-tier tier1_fast
+python tools/skin_tools.py fast --image data/sample_lesion.jpg
+python tools/skin_lesion_fast.py --image data/sample_lesion.jpg
 python tools/skin_tools.py validate --image data/sample_lesion.jpg
 python tools/skin_tools.py status
 python tools/skin_tools.py info

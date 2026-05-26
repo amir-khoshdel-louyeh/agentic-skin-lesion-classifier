@@ -1,7 +1,13 @@
 import argparse
 import json
+import os
+import sys
 from pathlib import Path
 from PIL import Image
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT_DIR))
+
 from core import analyze_skin_lesion
 
 SUPPORTED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".gif"}
@@ -46,6 +52,11 @@ def analyze_command(args: argparse.Namespace) -> int:
     result = analyze_skin_lesion(args.image_path, args.model_tier)
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0 if result.get("status") == "success" else 1
+
+
+def fast_command(args: argparse.Namespace) -> int:
+    args.model_tier = "tier1_fast"
+    return analyze_command(args)
 
 
 def escalate_command(args: argparse.Namespace) -> int:
@@ -118,6 +129,10 @@ def build_parser() -> argparse.ArgumentParser:
     predict_parser.add_argument("--image", dest="image_path", required=True, help="Path to the lesion image.")
     predict_parser.add_argument("--model-tier", dest="model_tier", choices=["tier1_fast", "tier2_deep"], required=True)
     predict_parser.set_defaults(func=analyze_command)
+
+    fast_parser = subparsers.add_parser("fast", help="Run the fast screening model (tier1_fast / EfficientNet-B0).")
+    fast_parser.add_argument("--image", dest="image_path", required=True, help="Path to the lesion image.")
+    fast_parser.set_defaults(func=fast_command)
 
     validate_parser = subparsers.add_parser("validate", help="Validate the image before inference.")
     validate_parser.add_argument("--image", dest="image_path", required=True, help="Path to the lesion image.")

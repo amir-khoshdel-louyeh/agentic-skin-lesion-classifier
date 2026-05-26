@@ -101,6 +101,7 @@ Example aliases:
 
 ```bash
 python tools/skin_tools.py predict --image data/sample_lesion.jpg --model-tier tier1_fast
+python tools/skin_lesion_fast.py --image data/sample_lesion.jpg
 python tools/skin_tools.py validate --image data/sample_lesion.jpg
 python tools/skin_tools.py info
 python tools/skin_tools.py list-tiers
