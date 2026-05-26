@@ -1,0 +1,9 @@
+# prompt.txt contains one JSON record per line.
+# Each record must include:
+# - image_path: local image file path
+# - prompt: instruction or question for OpenClaw
+# - metadata: optional JSON object with patient or case details
+
+{"image_path":"test.jpg","metadata":{"patient_id":"A001","age":45,"sex":"female"},"prompt":"Run the lightweight local tool skin-lesion-fast on this image using tier1_fast. Provide the final report in Markdown and include the exact command executed."}
+
+{"image_path":"test.jpg","metadata":{"patient_id":"A002","age":62,"sex":"male","history":"high risk"},"prompt":"Run the lightweight local tool skin-lesion-fast on this image using tier1_fast. Summarize the result and include the exact command executed."}
