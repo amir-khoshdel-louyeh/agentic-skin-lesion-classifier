@@ -13,11 +13,11 @@ class ImageProcessor:
         if not os.path.exists(image_path):
             raise FileNotFoundError(f"Image not found at: {image_path}")
             
-        # باز کردن تصویر و تصحیح جهت بر اساس EXIF
+        # Open the image and correct orientation using EXIF metadata
         image = Image.open(image_path)
         image = ImageOps.exif_transpose(image).convert('RGB')
 
-        # حفظ نسبت تصویر هنگام تغییر اندازه و اضافه کردن پد به یک ورودی مربع
+        # Preserve aspect ratio during resize and pad to a square input
         width, height = image.size
         scale = min(target_size / width, target_size / height)
         resized_size = (int(width * scale), int(height * scale))
@@ -28,11 +28,11 @@ class ImageProcessor:
         paste_y = (target_size - resized_size[1]) // 2
         padded_image.paste(image, (paste_x, paste_y))
 
-        # خط لوله پردازش متناسب با مدل‌های Pre-trained
+        # Preprocessing pipeline for pre-trained models
         transform_pipeline = transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
         
-        # تبدیل به تنسور و افزودن بعد Batch (اندازه خروجی: [1, 3, target_size, target_size])
+        # Convert to tensor and add batch dimension (output shape: [1, 3, target_size, target_size])
         return transform_pipeline(padded_image).unsqueeze(0)

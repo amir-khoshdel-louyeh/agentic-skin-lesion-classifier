@@ -13,10 +13,10 @@ class ModelFactory:
         model_name = model_name.lower()
         
         try:
-            # ایجاد مدل آماده به همراه بازنویسی خودکار لایه نهایی بر اساس کلاس‌های ما
+            # Create a ready-to-use model and replace the final classification head for our classes
             model = timm.create_model(model_name, pretrained=True, num_classes=num_classes)
             model = model.to(device)
-            model.eval()  # غیرفعال کردن Dropout برای استنتاج پایدار
+            model.eval()  # disable dropout for stable inference
             return model
         except Exception as e:
             raise RuntimeError(f"Failed to load model {model_name} via timm. Error: {str(e)}")

@@ -97,6 +97,15 @@ Example:
 
 If you want the agent to use OpenClaw terminal tooling, instruct it to run those commands from the local shell.
 
+Example aliases:
+
+```bash
+python tools/skin_tools.py predict --image data/sample_lesion.jpg --model-tier tier1_fast
+python tools/skin_tools.py validate --image data/sample_lesion.jpg
+python tools/skin_tools.py info
+python tools/skin_tools.py list-tiers
+```
+
 ## 6. Optional: integrate through `openclaw.OpenClaw.local()`
 
 If you want Python code to drive OpenClaw directly, use the installed OpenClaw SDK:

@@ -5,7 +5,7 @@ from PIL import Image
 from core.model_factory import ModelFactory
 from core.processors import ImageProcessor
 
-# نگاشت شناسه‌های عددی مجموعه داده به نام‌های واقعی استاندارد پزشکی
+# Map numeric dataset labels to standard medical names
 LABEL_MAP = {
     0: "Actinic keratoses (ضایعات پیش‌سرطانی)",
     1: "Basal cell carcinoma (سرطان سلول پایه‌ای)",
@@ -65,7 +65,7 @@ def analyze_skin_lesion(image_path: str, model_tier: str) -> dict:
 
         model_tier = model_tier.lower()
         
-        # ۱. مدیریت پنهان تغییر سایز و انتخاب مدل بر اساس انتخاب لایه توسط عامل
+        # 1. Choose the correct model and input size for the selected tier
         if model_tier == "tier1_fast":
             target_size = 224
             model_name = "efficientnet_b0"
@@ -80,14 +80,14 @@ def analyze_skin_lesion(image_path: str, model_tier: str) -> dict:
         
         print(f"[Internal Tool] Processing: Resizing image to {target_size}x{target_size} for {model_name}...")
         
-        # ۲. پیش‌پردازش تصویر
+        # 2. Preprocess the image
         image_tensor = ImageProcessor.process_image(image_path, target_size=target_size)
         
-        # ۳. دریافت مدل و اجرای استنتاج
+        # 3. Load the model and run inference
         model = ModelFactory.get_model(model_name, num_classes=7)
         probabilities = ModelFactory.run_inference(model, image_tensor)
         
-        # ۴. استخراج بالاترین احتمال و ایندکس مربوطه
+        # 4. Extract the highest probability and predicted class index
         confidence, class_idx = probabilities.max(dim=1)
         idx = class_idx.item()
         

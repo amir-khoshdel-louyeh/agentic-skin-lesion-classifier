@@ -72,6 +72,27 @@ def escalate_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def validate_command(args: argparse.Namespace) -> int:
+    validation = validate_image_path(args.image_path)
+    print(json.dumps(validation, indent=2, ensure_ascii=False))
+    return 0 if validation["status"] == "ok" else 1
+
+
+def info_command(args: argparse.Namespace) -> int:
+    return status_command(args)
+
+
+def list_tiers_command(args: argparse.Namespace) -> int:
+    print(json.dumps({
+        "available_model_tiers": {
+            "tier1_fast": "EfficientNet-B0 based fast screening model",
+            "tier2_deep": "EfficientNet-B4 based deeper accuracy model"
+        },
+        "description": "Use --model-tier to select the desired inference tier."
+    }, indent=2, ensure_ascii=False))
+    return 0
+
+
 def status_command(args: argparse.Namespace) -> int:
     print(json.dumps({
         "sample_image_path": str(Path(args.image_path).resolve()) if args.image_path else None,
@@ -93,6 +114,15 @@ def build_parser() -> argparse.ArgumentParser:
     analyze_parser.add_argument("--model-tier", dest="model_tier", choices=["tier1_fast", "tier2_deep"], required=True)
     analyze_parser.set_defaults(func=analyze_command)
 
+    predict_parser = subparsers.add_parser("predict", help="Alias for analyze; run a skin lesion prediction.")
+    predict_parser.add_argument("--image", dest="image_path", required=True, help="Path to the lesion image.")
+    predict_parser.add_argument("--model-tier", dest="model_tier", choices=["tier1_fast", "tier2_deep"], required=True)
+    predict_parser.set_defaults(func=analyze_command)
+
+    validate_parser = subparsers.add_parser("validate", help="Validate the image before inference.")
+    validate_parser.add_argument("--image", dest="image_path", required=True, help="Path to the lesion image.")
+    validate_parser.set_defaults(func=validate_command)
+
     escalate_parser = subparsers.add_parser("escalate", help="Run tier1 analysis and escalate to tier2 if needed.")
     escalate_parser.add_argument("--image", dest="image_path", required=True, help="Path to the lesion image.")
     escalate_parser.add_argument("--threshold", type=float, default=0.85, help="Confidence threshold for escalation.")
@@ -101,6 +131,13 @@ def build_parser() -> argparse.ArgumentParser:
     status_parser = subparsers.add_parser("status", help="Show the available local skin lesion tools.")
     status_parser.add_argument("--image", dest="image_path", default=None, help="Optional sample image path.")
     status_parser.set_defaults(func=status_command)
+
+    info_parser = subparsers.add_parser("info", help="Alias for status; show tool availability.")
+    info_parser.add_argument("--image", dest="image_path", default=None, help="Optional sample image path.")
+    info_parser.set_defaults(func=info_command)
+
+    list_tiers_parser = subparsers.add_parser("list-tiers", help="Show available model tiers and descriptions.")
+    list_tiers_parser.set_defaults(func=list_tiers_command)
 
     return parser
 
