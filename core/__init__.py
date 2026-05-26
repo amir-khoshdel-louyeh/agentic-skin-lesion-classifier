@@ -1,5 +1,7 @@
 # core/__init__.py
 import torch
+from pathlib import Path
+from PIL import Image
 from core.model_factory import ModelFactory
 from core.processors import ImageProcessor
 
@@ -14,6 +16,39 @@ LABEL_MAP = {
     6: "Vascular lesions (ضایعات عروقی)"
 }
 
+SUPPORTED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".gif"}
+
+
+def validate_image_input(image_path: str) -> dict:
+    path = Path(image_path)
+    if not path.exists():
+        return {
+            "status": "error",
+            "message": f"Image not found at: {image_path}"
+        }
+    if not path.is_file():
+        return {
+            "status": "error",
+            "message": f"Path exists but is not a file: {image_path}"
+        }
+    if path.suffix.lower() not in SUPPORTED_IMAGE_EXTENSIONS:
+        return {
+            "status": "error",
+            "message": f"Unsupported image type: {path.suffix}. Supported types: {', '.join(sorted(SUPPORTED_IMAGE_EXTENSIONS))}"
+        }
+
+    try:
+        with Image.open(path) as img:
+            img.verify()
+    except Exception as exc:
+        return {
+            "status": "error",
+            "message": f"Bad input image before inference: {str(exc)}"
+        }
+
+    return {"status": "ok"}
+
+
 def analyze_skin_lesion(image_path: str, model_tier: str) -> dict:
     """
     An advanced clinical tool to analyze skin lesions using deep learning models.
@@ -24,6 +59,10 @@ def analyze_skin_lesion(image_path: str, model_tier: str) -> dict:
                         or 'tier2_deep' (uses High-Accuracy EfficientNet-B4).
     """
     try:
+        validation = validate_image_input(image_path)
+        if validation["status"] != "ok":
+            return validation
+
         model_tier = model_tier.lower()
         
         # ۱. مدیریت پنهان تغییر سایز و انتخاب مدل بر اساس انتخاب لایه توسط عامل
