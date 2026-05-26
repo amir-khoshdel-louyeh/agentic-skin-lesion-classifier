@@ -7,13 +7,13 @@ from core.processors import ImageProcessor
 
 # Map numeric dataset labels to standard medical names
 LABEL_MAP = {
-    0: "Actinic keratoses (ضایعات پیش‌سرطانی)",
-    1: "Basal cell carcinoma (سرطان سلول پایه‌ای)",
-    2: "Benign keratosis (کراتوز خوش‌خیم پوست)",
-    3: "Dermatofibroma (درماتوفیبروما)",
-    4: "Melanocytic nevi (خال‌های خوش‌خیم)",
-    5: "Melanoma (ملانوما - سرطان بدخیم پوست)",
-    6: "Vascular lesions (ضایعات عروقی)"
+    0: "Actinic keratoses",
+    1: "Basal cell carcinoma",
+    2: "Benign keratosis",
+    3: "Dermatofibroma",
+    4: "Melanocytic nevi",
+    5: "Melanoma",
+    6: "Vascular lesions"
 }
 
 SUPPORTED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".gif"}
