@@ -1,7 +1,10 @@
 import argparse
 import json
 from pathlib import Path
+from PIL import Image
 from core import analyze_skin_lesion
+
+SUPPORTED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".gif"}
 
 
 def validate_image_path(image_path: str) -> dict:
@@ -16,6 +19,21 @@ def validate_image_path(image_path: str) -> dict:
             "status": "error",
             "message": f"Path exists but is not a file: {image_path}"
         }
+    if path.suffix.lower() not in SUPPORTED_IMAGE_EXTENSIONS:
+        return {
+            "status": "error",
+            "message": f"Unsupported file type: {path.suffix}. Supported types: {', '.join(sorted(SUPPORTED_IMAGE_EXTENSIONS))}"
+        }
+
+    try:
+        with Image.open(path) as img:
+            img.verify()
+    except Exception:
+        return {
+            "status": "error",
+            "message": f"File is not a valid image or is corrupted: {image_path}"
+        }
+
     return {"status": "ok"}
 
 
