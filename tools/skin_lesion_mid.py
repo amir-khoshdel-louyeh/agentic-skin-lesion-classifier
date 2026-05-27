@@ -1,13 +1,21 @@
 import argparse
 import json
-import sys
 from pathlib import Path
-from PIL import Image
+from typing import Any, Dict, Optional
+from PIL import Image, ImageOps
+import torch
+import timm
+from torchvision import transforms
 
-ROOT_DIR = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT_DIR))
-
-from core import ModelFactory, ImageProcessor, LABEL_MAP
+LABEL_MAP = {
+    0: "Actinic keratoses",
+    1: "Basal cell carcinoma",
+    2: "Benign keratosis",
+    3: "Dermatofibroma",
+    4: "Melanocytic nevi",
+    5: "Melanoma",
+    6: "Vascular lesions",
+}
 
 SUPPORTED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".gif"}
 
@@ -42,19 +50,73 @@ def validate_image_path(image_path: str) -> dict:
     return {"status": "ok"}
 
 
-def predict_mid(image_path: str) -> dict:
+def parse_metadata(metadata_json: Optional[str]) -> Optional[Dict[str, Any]]:
+    if not metadata_json:
+        return None
+
+    try:
+        return json.loads(metadata_json)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid metadata JSON: {exc}") from exc
+
+
+def process_image(image_path: str, target_size: int = 380):
+    if not Path(image_path).exists():
+        raise FileNotFoundError(f"Image not found at: {image_path}")
+
+    image = Image.open(image_path)
+    image = ImageOps.exif_transpose(image).convert("RGB")
+
+    width, height = image.size
+    scale = min(target_size / width, target_size / height)
+    resized_size = (int(width * scale), int(height * scale))
+    image = image.resize(resized_size, Image.BICUBIC)
+
+    padded_image = Image.new("RGB", (target_size, target_size), (0, 0, 0))
+    paste_x = (target_size - resized_size[0]) // 2
+    paste_y = (target_size - resized_size[1]) // 2
+    padded_image.paste(image, (paste_x, paste_y))
+
+    transform_pipeline = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+
+    return transform_pipeline(padded_image).unsqueeze(0)
+
+
+def get_model(model_name: str, num_classes: int = 7):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    try:
+        model = timm.create_model(model_name, pretrained=True, num_classes=num_classes)
+        model = model.to(device)
+        model.eval()
+        return model
+    except Exception as exc:
+        raise RuntimeError(f"Failed to load model {model_name}: {exc}") from exc
+
+
+def run_inference(model, image_tensor):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    with torch.no_grad():
+        tensor_input = image_tensor.to(device)
+        outputs = model(tensor_input)
+        return torch.softmax(outputs, dim=1)
+
+
+def predict_mid(image_path: str, metadata: Optional[Dict[str, Any]] = None) -> dict:
     validation = validate_image_path(image_path)
     if validation["status"] != "ok":
         return validation
 
-    image_tensor = ImageProcessor.process_image(image_path, target_size=380)
-    model = ModelFactory.get_model("efficientnet_b4", num_classes=7)
-    probabilities = ModelFactory.run_inference(model, image_tensor)
+    image_tensor = process_image(image_path, target_size=380)
+    model = get_model("efficientnet_b4", num_classes=7)
+    probabilities = run_inference(model, image_tensor)
 
     confidence, class_idx = probabilities.max(dim=1)
     idx = class_idx.item()
 
-    return {
+    result = {
         "status": "success",
         "tool": "skin-lesion-mid",
         "model_tier": "tier2_mid",
@@ -64,6 +126,11 @@ def predict_mid(image_path: str) -> dict:
         "confidence_score": round(confidence.item(), 4)
     }
 
+    if metadata is not None:
+        result["metadata"] = metadata
+
+    return result
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(
@@ -71,9 +138,17 @@ def main() -> int:
         description="Run the mid-tier skin lesion screening model using EfficientNet-B4."
     )
     parser.add_argument("--image", dest="image_path", required=True, help="Path to the lesion image.")
+    parser.add_argument("--metadata", dest="metadata", required=False, help="Optional JSON metadata about the patient or image.")
     args = parser.parse_args()
 
-    result = predict_mid(args.image_path)
+    metadata = None
+    try:
+        metadata = parse_metadata(args.metadata)
+    except ValueError as exc:
+        print(json.dumps({"status": "error", "message": str(exc)}, indent=2, ensure_ascii=False))
+        return 1
+
+    result = predict_mid(args.image_path, metadata=metadata)
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0 if result.get("status") == "success" else 1
 
