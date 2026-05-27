@@ -93,29 +93,119 @@ requests>=2.31.0
 
 ## 🚀 Running the System
 
-### Step 1: Start the Core Infrastructure
+### Step 1: Start the OpenClaw runtime
 
-Use the provided PowerShell launcher to start Ollama and the OpenClaw gateway safely.
-
-1. Open `run_openclaw.ps1`
-2. Update `$OPENCLAW_DIR` to your OpenClaw runtime folder
-3. Run:
+Start the OpenClaw gateway or node service:
 
 ```powershell
-.\run_openclaw.ps1
+openclaw gateway run --force
 ```
 
-This script manages isolated background execution for Ollama and the OpenClaw Node gateway, and provides a small command shell for graceful shutdown.
+or, if the node service is installed:
 
-### Step 2: Start the Local CNN Service
+```powershell
+openclaw node start
+```
 
-In the activated `.venv` session, start the FastAPI service:
+### Step 2: Install the local skill
+
+Install the lightweight local tool so OpenClaw can execute it:
+
+```powershell
+openclaw --no-color skills install --force ./openclaw-skills/skin-lesion-fast
+```
+
+### Step 3: Run the OpenClaw prompt queue
+
+The file `prompt.txt` contains one record per line. Each record is JSON and must include:
+
+- `image_path` — local image file path
+- `prompt` — the task prompt for OpenClaw
+- `metadata` — optional JSON object with patient or case details
+
+Run the queue processor with:
 
 ```bash
-python skin_agent.py
+python openclaw_prompt_queue.py
 ```
 
-The server listens at `http://127.0.0.1:8000/analyze`.
+If you want to send a single record by index:
+
+```bash
+python openclaw_prompt_queue.py --record-index 0
+```
+
+This script sends records to OpenClaw one at a time. OpenClaw will decide which available tool(s) to use based on the prompt and the current toolset.
+
+#### OpenClaw agent requirement
+
+`openclaw_prompt_queue.py` requires OpenClaw to be installed and available on your PATH. It uses the OpenClaw CLI to run prompts against your configured local agent.
+
+If the command fails, you may need to start the OpenClaw node/gateway first.
+
+Also make sure the local `skin-lesion-fast` skill is installed in OpenClaw:
+
+```powershell
+openclaw --no-color skills install ./openclaw-skills/skin-lesion-fast
+```
+
+Then run the queue processor:
+
+```bash
+python openclaw_prompt_queue.py
+```
+
+### Step 2.5: Use the local CLI tool
+
+The file `prompt.txt` contains one record per line. Each record is JSON and must include:
+
+- `image_path` — local image file path
+- `prompt` — the task prompt for OpenClaw
+- `metadata` — optional JSON object with patient or case details
+
+Run the queue processor with:
+
+```bash
+python openclaw_prompt_queue.py
+```
+
+This script sends records to OpenClaw one at a time. OpenClaw will decide which available tool(s) to use based on the prompt and the current toolset.
+
+#### OpenClaw agent requirement
+
+`openclaw_prompt_queue.py` requires OpenClaw to be installed and available on your PATH. It uses the OpenClaw CLI to run prompts against your configured local agent.
+
+If the command fails, you may need to start the OpenClaw node/gateway first.
+
+Also make sure the local `skin-lesion-fast` skill is installed in OpenClaw:
+
+```powershell
+openclaw --no-color skills install ./openclaw-skills/skin-lesion-fast
+```
+
+Start the OpenClaw runtime by running either:
+
+```powershell
+openclaw gateway run --force
+```
+
+or, if the node service is installed:
+
+```powershell
+openclaw node start
+```
+
+Then run the queue processor:
+
+```bash
+python openclaw_prompt_queue.py
+```
+
+If you want to send a single record by index:
+
+```bash
+python openclaw_prompt_queue.py --record-index 0
+```
 
 ### Step 2.5: Use the local CLI tool
 
@@ -134,15 +224,6 @@ python tools/skin_tools.py list-tiers
 
 `predict` is an alias for `analyze`, and `info` is an alias for `status`.
 
-### Step 3: Execute the Pipeline
-
-Run the top-level pipeline controller:
-
-```bash
-python run_pipeline.py
-```
-
----
 
 ## 🧠 Deterministic LLM Logic
 
