@@ -9,14 +9,15 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 DEFAULT_PROMPT_FILE = Path("prompt.txt")
+DEFAULT_TOOL_HELP_FILE = Path("tool_manifest.md")
 DEFAULT_OPENCLAW_PROMPT = textwrap.dedent(
     """
     You are an OpenClaw orchestrator for skin lesion analysis.
     A new record has arrived containing an image path, optional metadata, and a clinical prompt.
-    Use the installed local tool `skin-lesion-fast` or the lightweight tier1_fast workflow.
-    Do not refuse execution based on a subjective memory estimate when the tool is small and available.
-    If the image is valid and the tool exists, execute it using the exact local command.
-    Return the final result as a concise Markdown clinical report and include the executed tool command.
+    Use the local CLI scripts listed in the helper manifest.
+    Do not hard-code decision logic in this script; decide the workflow from the prompt and metadata.
+    If the first tool returns low confidence, automatically escalate to the more accurate tool.
+    Choose the best available command from the helper file, execute it exactly, and return the final result as a concise Markdown clinical report.
     """
 )
 
@@ -49,7 +50,13 @@ def load_prompt_records(prompt_file: Path) -> List[Dict[str, Any]]:
     return records
 
 
-def build_prompt(record: Dict[str, Any]) -> str:
+def load_tool_helper(tool_helper_file: Path) -> str:
+    if not tool_helper_file.exists():
+        return ""
+    return tool_helper_file.read_text(encoding="utf-8").strip()
+
+
+def build_prompt(record: Dict[str, Any], tool_helper_file: Optional[Path] = None) -> str:
     metadata = record.get("metadata")
     metadata_section = ""
     if metadata is not None:
@@ -59,6 +66,12 @@ def build_prompt(record: Dict[str, Any]) -> str:
     image_path = record["image_path"]
     prompt_text = record["prompt"]
 
+    helper_section = ""
+    if tool_helper_file is not None:
+        helper_text = load_tool_helper(tool_helper_file)
+        if helper_text:
+            helper_section = f"\nAvailable local tools:\n{helper_text}\n"
+
     return textwrap.dedent(
         f"""
         {DEFAULT_OPENCLAW_PROMPT}
@@ -66,7 +79,7 @@ def build_prompt(record: Dict[str, Any]) -> str:
         Image path: {image_path}
         {metadata_section}
         User prompt: {prompt_text}
-
+        {helper_section}
         Use the available local tools and return a final report in Markdown.
         """
     )
@@ -97,7 +110,22 @@ def run_openclaw_cli(prompt: str, agent_id: str = "main") -> Dict[str, Any]:
         "--json",
     ]
 
-    result = subprocess.run(command, capture_output=True, text=True)
+    print("Running OpenClaw agent command. This may take a while if the tool needs to load models.")
+    print("Command:", " ".join(command))
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=600,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            "OpenClaw CLI timed out after 600 seconds. Ensure the OpenClaw gateway and local tools are running."
+        ) from exc
+
     if result.returncode != 0:
         raise RuntimeError(
             "OpenClaw CLI failed: "
@@ -116,6 +144,7 @@ def send_records_to_openclaw(
     prompt_file: Path,
     record_index: Optional[int] = None,
     agent_id: str = "main",
+    tool_helper_file: Optional[Path] = None,
 ) -> None:
     records = load_prompt_records(prompt_file)
     if record_index is not None:
@@ -128,7 +157,7 @@ def send_records_to_openclaw(
         print(f"Processing prompt record {idx + 1}/{len(records)}")
         print(f"Image path: {record['image_path']}")
 
-        prompt = build_prompt(record)
+        prompt = build_prompt(record, tool_helper_file=tool_helper_file)
         response = run_openclaw_cli(prompt, agent_id=agent_id)
 
         if isinstance(response, dict) and response.get("payloads"):
@@ -163,6 +192,11 @@ def build_parser() -> argparse.ArgumentParser:
         default="main",
         help="OpenClaw agent ID to run the prompt against (default: main).",
     )
+    parser.add_argument(
+        "--tool-helper-file",
+        default=str(DEFAULT_TOOL_HELP_FILE),
+        help="Optional helper file containing available local tool commands.",
+    )
     return parser
 
 
@@ -170,10 +204,12 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
     prompt_path = Path(args.prompt_file)
+    tool_helper_path = Path(args.tool_helper_file)
     send_records_to_openclaw(
         prompt_path,
         record_index=args.record_index,
         agent_id=args.agent_id,
+        tool_helper_file=tool_helper_path,
     )
 
 
