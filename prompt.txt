@@ -4,6 +4,6 @@
 # - prompt: instruction or question for OpenClaw
 # - metadata: optional JSON object with patient or case details
 
-{"image_path":"test.jpg","metadata":{"patient_id":"A001","age":45,"sex":"female"},"prompt":"Run the lightweight local tool skin-lesion-fast on this image using tier1_fast. Provide the final report in Markdown and include the exact command executed."}
+{"image_path":"test.jpg","metadata":{"patient_id":"A001","age":45,"sex":"female"},"prompt":"Is this an skin cancer?"}
 
-{"image_path":"test.jpg","metadata":{"patient_id":"A002","age":62,"sex":"male","history":"high risk"},"prompt":"Run the lightweight local tool skin-lesion-fast on this image using tier1_fast. Summarize the result and include the exact command executed."}
+{"image_path":"test.jpg","metadata":{"patient_id":"A002","age":62,"sex":"male","history":"high risk"},"prompt":"Choose the best available local tool and run it on this image to see is it cancer or not."}
