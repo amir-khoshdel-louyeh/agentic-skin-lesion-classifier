@@ -209,20 +209,14 @@ python openclaw_prompt_queue.py --record-index 0
 
 ### Step 2.5: Use the local CLI tool
 
-You can also invoke the wrapper tool directly for prediction or validation:
+Invoke the direct tool scripts for prediction or validation:
 
 ```bash
-python tools/skin_tools.py analyze --image data/sample_lesion.jpg --model-tier tier1_fast
-python tools/skin_tools.py predict --image data/sample_lesion.jpg --model-tier tier1_fast
-python tools/skin_tools.py fast --image data/sample_lesion.jpg
 python tools/skin_lesion_fast.py --image data/sample_lesion.jpg
-python tools/skin_tools.py validate --image data/sample_lesion.jpg
-python tools/skin_tools.py status
-python tools/skin_tools.py info
-python tools/skin_tools.py list-tiers
+python tools/skin_lesion_mid.py --image data/sample_lesion.jpg
 ```
 
-`predict` is an alias for `analyze`, and `info` is an alias for `status`.
+For a specific model tier, use `skin_lesion_fast.py` for `tier1_fast` or `skin_lesion_mid.py` for `tier2_mid`.
 
 
 ## 🧠 Deterministic LLM Logic
