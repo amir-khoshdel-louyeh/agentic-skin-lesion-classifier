@@ -1,9 +1,9 @@
 ﻿import argparse
 import json
-import os
 import shutil
 import subprocess
 import textwrap
+import time
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -15,9 +15,11 @@ DEFAULT_OPENCLAW_PROMPT = textwrap.dedent(
     You are an OpenClaw orchestrator for skin lesion analysis.
     A new record has arrived containing an image path, optional metadata, and a clinical prompt.
     Use the local CLI scripts listed in the helper manifest.
-    Do not hard-code decision logic in this script; decide the workflow from the prompt and metadata.
+    Execute the exact command shown in the helper manifest, then return a final concise Markdown clinical report.
+    Do not produce planning text, progress updates, or still running language.
+    Do not include any intermediate monitoring commentary.
+    Do not say the tool is running or that you will wait; instead, execute the tool immediately and respond only once it has finished.
     If the first tool returns low confidence, automatically escalate to the more accurate tool.
-    Choose the best available command from the helper file, execute it exactly, and return the final result as a concise Markdown clinical report.
     """
 )
 
@@ -94,6 +96,24 @@ def find_openclaw_executable() -> str:
     return command
 
 
+def is_transient_openclaw_error(output: str) -> bool:
+    lower = output.lower()
+    return any(
+        marker in lower
+        for marker in [
+            "embeddedattemptsessiontakeovererror",
+            "session file changed while embedded prompt lock was released",
+            "auto-compaction",
+            "willretry=false",
+            "threshold",
+            "incomplete turn detected",
+            "failovererror",
+            "candidate_failed",
+            "incomplete terminal response",
+        ]
+    )
+
+
 def run_openclaw_cli(prompt: str, agent_id: str = "main") -> Dict[str, Any]:
     session_id = f"prompt-{uuid.uuid4().hex}"
     openclaw_cmd = find_openclaw_executable()
@@ -108,36 +128,103 @@ def run_openclaw_cli(prompt: str, agent_id: str = "main") -> Dict[str, Any]:
         session_id,
         f"--message={clean_prompt}",
         "--json",
+        "--thinking",
+        "off",
     ]
 
     print("Running OpenClaw agent command. This may take a while if the tool needs to load models.")
     print("Command:", " ".join(command))
-    try:
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=600,
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(
-            "OpenClaw CLI timed out after 600 seconds. Ensure the OpenClaw gateway and local tools are running."
-        ) from exc
 
-    if result.returncode != 0:
-        raise RuntimeError(
-            "OpenClaw CLI failed: "
-            + (result.stderr.strip() or result.stdout.strip() or "unknown error")
-        )
+    max_retries = 2
+    for attempt in range(1, max_retries + 2):
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=600,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(
+                "OpenClaw CLI timed out after 600 seconds. Ensure the OpenClaw gateway and local tools are running."
+            ) from exc
 
-    try:
-        return json.loads(result.stdout)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(
-            f"OpenClaw CLI returned invalid JSON: {result.stdout}"
-        ) from exc
+        if result.returncode != 0:
+            stderr_text = result.stderr.strip()
+            stdout_text = result.stdout.strip()
+            combined = f"{stderr_text}\n{stdout_text}".strip()
+            if attempt <= max_retries and is_transient_openclaw_error(combined):
+                print(f"Transient OpenClaw error detected on attempt {attempt}; retrying...")
+                time.sleep(2)
+                continue
+            raise RuntimeError(
+                "OpenClaw CLI failed: "
+                + (stderr_text or stdout_text or "unknown error")
+            )
+
+        try:
+            return json.loads(result.stdout)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(
+                f"OpenClaw CLI returned invalid JSON: {result.stdout}"
+            ) from exc
+
+
+def response_is_incomplete(payload_text: str) -> bool:
+    if not isinstance(payload_text, str):
+        return True
+    lower_text = payload_text.lower()
+    incomplete_markers = [
+        "still running",
+        "please wait",
+        "waiting",
+        "in progress",
+        "not yet",
+        "monitor",
+        "progress",
+        "will provide",
+        "will execute",
+        "executing",
+        "continue",
+        "ongoing",
+        "planning",
+        "plan",
+        "retry",
+        "unexpected token",
+        "suggests there might be issues",
+        "should resolve any syntax issues",
+        "this command should resolve",
+        "for a more definitive diagnosis",
+        "escalate to",
+        "command should resolve",
+        "there are no indications",
+    ]
+    return any(marker in lower_text for marker in incomplete_markers)
+
+
+def build_correction_prompt(
+    record: Dict[str, Any],
+    previous_response: str,
+    tool_helper_file: Optional[Path] = None,
+) -> str:
+    base_prompt = build_prompt(record, tool_helper_file=tool_helper_file)
+    return textwrap.dedent(
+        f"""
+        {base_prompt}
+
+        The previous OpenClaw response was not a valid final report. It used planning, debugging, or waiting language instead of returning a completed clinical result.
+        Retry the task once and return only the final concise Markdown clinical report with the exact command that was executed.
+        Do not say the tool is running, that you are waiting, or that you will continue monitoring.
+        Do not explain shell quoting or syntax issues; instead, execute the tool command exactly and show the actual output.
+        If the tool fails, print the raw tool error output and do not hallucinate a diagnosis.
+        Use the same available local tools and escalate if needed.
+
+        Previous response:
+        {previous_response}
+        """
+    )
 
 
 def send_records_to_openclaw(
@@ -158,8 +245,8 @@ def send_records_to_openclaw(
         print(f"Image path: {record['image_path']}")
 
         prompt = build_prompt(record, tool_helper_file=tool_helper_file)
-        response = run_openclaw_cli(prompt, agent_id=agent_id)
 
+        response = run_openclaw_cli(prompt, agent_id=agent_id)
         if isinstance(response, dict) and response.get("payloads"):
             payload_text = "\n".join(
                 item.get("text", "") for item in response["payloads"]
@@ -169,6 +256,21 @@ def send_records_to_openclaw(
 
         print("--- OpenClaw response ---")
         print(payload_text)
+
+        if response_is_incomplete(payload_text):
+            print("OpenClaw response appears incomplete or planning-oriented. Retrying with a correction prompt.")
+            correction_prompt = build_correction_prompt(record, payload_text, tool_helper_file=tool_helper_file)
+            retry_response = run_openclaw_cli(correction_prompt, agent_id=agent_id)
+            if isinstance(retry_response, dict) and retry_response.get("payloads"):
+                payload_text = "\n".join(
+                    item.get("text", "") for item in retry_response["payloads"]
+                )
+            else:
+                payload_text = json.dumps(retry_response, indent=2, ensure_ascii=False)
+
+            print("--- OpenClaw correction response ---")
+            print(payload_text)
+
         print("" + "=" * 70 + "\n")
 
 
