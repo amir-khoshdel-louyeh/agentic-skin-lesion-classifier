@@ -11,7 +11,7 @@ This skill runs the local fast screening skin lesion model.
 ## Command
 
 ```bash
-python tools/skin_lesion_fast.py --image <path_to_image>
+C:/Amir/GitHub/agentic-skin-lesion-classifier/.venv/Scripts/python.exe skills/skin-lesion-fast/tools/skin_lesion_fast.py --image <path_to_image>
 ```
 
 ## Behavior
