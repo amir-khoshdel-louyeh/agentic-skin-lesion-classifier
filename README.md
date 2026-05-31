@@ -126,20 +126,20 @@ The file `prompt.txt` contains one record per line. Each record is JSON and must
 Run the queue processor with:
 
 ```bash
-python openclaw_prompt_queue.py
+python skin_agent.py
 ```
 
 If you want to send a single record by index:
 
 ```bash
-python openclaw_prompt_queue.py --record-index 0
+python skin_agent.py --record-index 0
 ```
 
 This script sends records to OpenClaw one at a time. OpenClaw will decide which available tool(s) to use based on the prompt and the current toolset.
 
 #### OpenClaw agent requirement
 
-`openclaw_prompt_queue.py` requires OpenClaw to be installed and available on your PATH. It uses the OpenClaw CLI to run prompts against your configured local agent.
+`skin_agent.py` requires OpenClaw to be installed and available on your PATH. It uses the OpenClaw CLI to run prompts against your configured local agent.
 
 If the command fails, you may need to start the OpenClaw node/gateway first.
 
@@ -152,72 +152,12 @@ openclaw --no-color skills install ./openclaw-skills/skin-lesion-fast
 Then run the queue processor:
 
 ```bash
-python openclaw_prompt_queue.py
+python skin_agent.py
 ```
 
-### Step 2.5: Use the local CLI tool
+### Developer note: local CLI commands
 
-The file `prompt.txt` contains one record per line. Each record is JSON and must include:
-
-- `image_path` — local image file path
-- `prompt` — the task prompt for OpenClaw
-- `metadata` — optional JSON object with patient or case details
-
-Run the queue processor with:
-
-```bash
-python openclaw_prompt_queue.py
-```
-
-This script sends records to OpenClaw one at a time. OpenClaw will decide which available tool(s) to use based on the prompt and the current toolset.
-
-#### OpenClaw agent requirement
-
-`openclaw_prompt_queue.py` requires OpenClaw to be installed and available on your PATH. It uses the OpenClaw CLI to run prompts against your configured local agent.
-
-If the command fails, you may need to start the OpenClaw node/gateway first.
-
-Also make sure the local `skin-lesion-fast` skill is installed in OpenClaw:
-
-```powershell
-openclaw --no-color skills install ./openclaw-skills/skin-lesion-fast
-```
-
-Start the OpenClaw runtime by running either:
-
-```powershell
-openclaw gateway run --force
-```
-
-or, if the node service is installed:
-
-```powershell
-openclaw node start
-```
-
-Then run the queue processor:
-
-```bash
-python openclaw_prompt_queue.py
-```
-
-If you want to send a single record by index:
-
-```bash
-python openclaw_prompt_queue.py --record-index 0
-```
-
-### Step 2.5: Use the local CLI tool
-
-Invoke the direct tool scripts for prediction or validation:
-
-```bash
-python tools/skin_lesion_fast.py --image data/sample_lesion.jpg
-python tools/skin_lesion_mid.py --image data/sample_lesion.jpg
-```
-
-For a specific model tier, use `skin_lesion_fast.py` for `tier1_fast` or `skin_lesion_mid.py` for `tier2_mid`.
-
+The local tool scripts in `tools/` are provided for skill development and validation only. The system should always run via OpenClaw in normal operation.
 
 ## 🧠 Deterministic LLM Logic
 
