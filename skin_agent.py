@@ -114,7 +114,7 @@ def is_transient_openclaw_error(output: str) -> bool:
     )
 
 
-def run_openclaw_cli(prompt: str, agent_id: str = "main") -> Dict[str, Any]:
+def run_openclaw_cli(prompt: str, agent_id: str = "main", show_command: bool = True) -> Dict[str, Any]:
     session_id = f"prompt-{uuid.uuid4().hex}"
     openclaw_cmd = find_openclaw_executable()
     clean_prompt = " ".join(prompt.strip().split())
@@ -132,8 +132,11 @@ def run_openclaw_cli(prompt: str, agent_id: str = "main") -> Dict[str, Any]:
         "off",
     ]
 
-    print("Running OpenClaw agent command. This may take a while if the tool needs to load models.")
-    print("Command:", " ".join(command))
+    if show_command:
+        print("Running OpenClaw agent command. This may take a while if the tool needs to load models.")
+        print("Command:", " ".join(command))
+    else:
+        print("Running OpenClaw agent command...")
 
     max_retries = 2
     for attempt in range(1, max_retries + 2):
@@ -200,8 +203,54 @@ def response_is_incomplete(payload_text: str) -> bool:
         "escalate to",
         "command should resolve",
         "there are no indications",
+        "neither the fast nor mid-tier",
+        "scripts are present",
+        "no analysis could be performed",
     ]
     return any(marker in lower_text for marker in incomplete_markers)
+
+
+def build_chat_prompt(
+    record: Dict[str, Any],
+    follow_up: str,
+    history: Optional[List[Dict[str, str]]] = None,
+    tool_helper_file: Optional[Path] = None,
+) -> str:
+    history_section = ""
+    if history:
+        history_lines = ["Conversation history:"]
+        for item in history[-5:]:
+            history_lines.append(f"User: {item['user']}")
+            history_lines.append(f"Assistant: {item['assistant']}")
+        history_section = "\n" + "\n".join(history_lines) + "\n"
+
+    metadata = record.get("metadata")
+    metadata_section = ""
+    if metadata is not None:
+        pretty_metadata = json.dumps(metadata, indent=2, ensure_ascii=False)
+        metadata_section = f"\nMetadata:\n{pretty_metadata}\n"
+
+    image_path = record["image_path"]
+    prompt_text = record["prompt"]
+    helper_section = ""
+    if tool_helper_file is not None:
+        helper_text = load_tool_helper(tool_helper_file)
+        if helper_text:
+            helper_section = f"\nAvailable local tools:\n{helper_text}\n"
+
+    return textwrap.dedent(
+        f"""
+        {DEFAULT_OPENCLAW_PROMPT}
+
+        Image path: {image_path}
+        {metadata_section}
+        User prompt: {prompt_text}
+        {helper_section}
+        {history_section}
+        Follow-up request: {follow_up}
+        Use the available local tools and return a final concise Markdown clinical report.
+        """
+    )
 
 
 def build_correction_prompt(
@@ -225,6 +274,59 @@ def build_correction_prompt(
         {previous_response}
         """
     )
+
+
+def run_interactive_chat(
+    record: Dict[str, Any],
+    agent_id: str = "main",
+    tool_helper_file: Optional[Path] = None,
+) -> None:
+    history: List[Dict[str, str]] = []
+    print("=" * 70)
+    print("Entering CLI chat mode. Type 'quit' or 'exit' to end.")
+    print(f"Image path: {record['image_path']}")
+    if record.get("metadata") is not None:
+        print(f"Metadata: {json.dumps(record['metadata'], ensure_ascii=False)}")
+    print("Use this chat to ask follow-up questions and update the agent prompt.")
+    print("=" * 70)
+
+    while True:
+        try:
+            user_input = input("You: ").strip()
+        except EOFError:
+            print("\nExiting chat mode.")
+            break
+
+        if not user_input:
+            continue
+        if user_input.lower() in {"quit", "exit", "q"}:
+            print("Exiting chat mode.")
+            break
+
+        prompt = build_chat_prompt(record, user_input, history=history, tool_helper_file=tool_helper_file)
+        response = run_openclaw_cli(prompt, agent_id=agent_id, show_command=False)
+        if isinstance(response, dict) and response.get("payloads"):
+            payload_text = "\n".join(
+                item.get("text", "") for item in response["payloads"]
+            )
+        else:
+            payload_text = json.dumps(response, indent=2, ensure_ascii=False)
+
+        print("Assistant:\n" + payload_text)
+
+        if response_is_incomplete(payload_text):
+            print("Assistant response appears incomplete or invalid. Retrying with a correction prompt.")
+            correction_prompt = build_correction_prompt(record, payload_text, tool_helper_file=tool_helper_file)
+            retry_response = run_openclaw_cli(correction_prompt, agent_id=agent_id, show_command=False)
+            if isinstance(retry_response, dict) and retry_response.get("payloads"):
+                payload_text = "\n".join(
+                    item.get("text", "") for item in retry_response["payloads"]
+                )
+            else:
+                payload_text = json.dumps(retry_response, indent=2, ensure_ascii=False)
+            print("Assistant (corrected):\n" + payload_text)
+
+        history.append({"user": user_input, "assistant": payload_text})
 
 
 def send_records_to_openclaw(
@@ -290,6 +392,33 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional zero-based index to send a single record.",
     )
     parser.add_argument(
+        "--interactive",
+        action="store_true",
+        default=True,
+        help="Run in interactive CLI chat mode (default).",
+    )
+    parser.add_argument(
+        "--no-interactive",
+        action="store_false",
+        dest="interactive",
+        help="Disable interactive mode and run in batch mode.",
+    )
+    parser.add_argument(
+        "--image-path",
+        default=None,
+        help="Image path to use in interactive mode if not loading from prompt.txt.",
+    )
+    parser.add_argument(
+        "--metadata",
+        default=None,
+        help="Optional JSON metadata to use in interactive mode.",
+    )
+    parser.add_argument(
+        "--prompt",
+        default=None,
+        help="Initial prompt text to use in interactive mode.",
+    )
+    parser.add_argument(
         "--agent-id",
         default="main",
         help="OpenClaw agent ID to run the prompt against (default: main).",
@@ -307,6 +436,37 @@ def main() -> None:
     args = parser.parse_args()
     prompt_path = Path(args.prompt_file)
     tool_helper_path = Path(args.tool_helper_file)
+
+    if args.interactive:
+        if args.prompt_file and prompt_path.exists():
+            records = load_prompt_records(prompt_path)
+            record = None
+            if args.record_index is not None:
+                if args.record_index < 0 or args.record_index >= len(records):
+                    raise IndexError("record_index is out of range")
+                record = records[args.record_index]
+            else:
+                record = records[0]
+        else:
+            image_path = args.image_path or input("Image path: ").strip()
+            metadata = None
+            if args.metadata:
+                metadata = json.loads(args.metadata)
+            else:
+                raw_metadata = input("Metadata JSON (or blank): ").strip()
+                if raw_metadata:
+                    metadata = json.loads(raw_metadata)
+            prompt_text = args.prompt or input("Initial prompt: ").strip()
+            record = {
+                "image_path": image_path,
+                "prompt": prompt_text,
+            }
+            if metadata is not None:
+                record["metadata"] = metadata
+
+        run_interactive_chat(record, agent_id=args.agent_id, tool_helper_file=tool_helper_path)
+        return
+
     send_records_to_openclaw(
         prompt_path,
         record_index=args.record_index,
