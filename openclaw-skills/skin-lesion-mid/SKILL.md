@@ -11,7 +11,7 @@ This skill runs the balanced skin lesion model using EfficientNet-B4.
 ## Command
 
 ```bash
-python tools/skin_lesion_mid.py --image <path_to_image>
+C:/Amir/GitHub/agentic-skin-lesion-classifier/.venv/Scripts/python.exe skills/skin-lesion-mid/tools/skin_lesion_mid.py --image <path_to_image>
 ```
 
 ## Behavior
