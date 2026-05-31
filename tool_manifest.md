@@ -2,12 +2,12 @@
 
 Available local CLI tools:
 
-1. `python tools/skin_lesion_fast.py --image <path> [--metadata <json>]`
+1. `C:/Amir/GitHub/agentic-skin-lesion-classifier/.venv/Scripts/python.exe skills/skin-lesion-fast/tools/skin_lesion_fast.py --image <path> [--metadata <json>]`
    - Fast first-pass screening
    - Model tier: `tier1_fast`
    - Model executed: `efficientnet_b0`
 
-2. `python tools/skin_lesion_mid.py --image <path> [--metadata <json>]`
+2. `C:/Amir/GitHub/agentic-skin-lesion-classifier/.venv/Scripts/python.exe skills/skin-lesion-mid/tools/skin_lesion_mid.py --image <path> [--metadata <json>]`
    - Balanced mid-tier screening
    - Model tier: `tier2_mid`
    - Model executed: `efficientnet_b4`
