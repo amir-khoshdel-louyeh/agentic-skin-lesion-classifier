@@ -1,4 +1,5 @@
 import argparse
+import ast
 import json
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -54,10 +55,29 @@ def parse_metadata(metadata_json: Optional[str]) -> Optional[Dict[str, Any]]:
     if not metadata_json:
         return None
 
+    cleaned = metadata_json.strip()
+    if len(cleaned) >= 2 and cleaned[0] == cleaned[-1] == "'":
+        cleaned = cleaned[1:-1].strip()
+
     try:
-        return json.loads(metadata_json)
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+
+    try:
+        parsed = ast.literal_eval(cleaned)
+        if isinstance(parsed, dict):
+            return parsed
+    except (ValueError, SyntaxError):
+        pass
+
+    try:
+        maybe_json = cleaned.replace("'", '"')
+        return json.loads(maybe_json)
     except json.JSONDecodeError as exc:
-        raise ValueError(f"Invalid metadata JSON: {exc}") from exc
+        raise ValueError(
+            f"Invalid metadata JSON: {exc}. Received: {metadata_json}"
+        ) from exc
 
 
 def process_image(image_path: str, target_size: int = 380):
