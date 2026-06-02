@@ -1,6 +1,7 @@
 import argparse
 import ast
 import json
+import re
 from pathlib import Path
 from typing import Any, Dict, Optional
 from PIL import Image, ImageOps
@@ -63,10 +64,32 @@ def parse_metadata(metadata_json: Optional[str]) -> Optional[Dict[str, Any]]:
     if len(cleaned) >= 2 and cleaned[0] == cleaned[-1] == "'":
         cleaned = cleaned[1:-1].strip()
 
-    try:
-        return json.loads(cleaned)
-    except json.JSONDecodeError:
-        pass
+    def normalize_unquoted(obj_str: str) -> str:
+        obj_str = obj_str.strip()
+        if not obj_str.startswith("{") or not obj_str.endswith("}"):
+            return obj_str
+
+        obj_str = re.sub(r'(?<=\{|,)\s*([A-Za-z_][A-Za-z0-9_]*)\s*:', r'"\1":', obj_str)
+
+        def quote_value(match: re.Match) -> str:
+            value = match.group(1)
+            if re.fullmatch(r'-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?', value):
+                return ":" + value
+            if value.lower() in {"true", "false", "null"}:
+                return ":" + value.lower()
+            return ':"' + value.replace('"', '\\"') + '"'
+
+        return re.sub(
+            r':\s*([A-Za-z_][A-Za-z0-9_]*)(?=\s*(?:,|\}))',
+            quote_value,
+            obj_str,
+        )
+
+    for candidate in [cleaned, cleaned.replace("'", '"'), normalize_unquoted(cleaned)]:
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
 
     try:
         parsed = ast.literal_eval(cleaned)
@@ -75,13 +98,9 @@ def parse_metadata(metadata_json: Optional[str]) -> Optional[Dict[str, Any]]:
     except (ValueError, SyntaxError):
         pass
 
-    try:
-        maybe_json = cleaned.replace("'", '"')
-        return json.loads(maybe_json)
-    except json.JSONDecodeError as exc:
-        raise ValueError(
-            f"Invalid metadata JSON: {exc}. Received: {metadata_json}"
-        ) from exc
+    raise ValueError(
+        f"Invalid metadata JSON: Received: {metadata_json}"
+    )
 
 
 def process_image(image_path: str, target_size: int = 224):
