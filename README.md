@@ -76,17 +76,32 @@ pip install -r requirements.txt
 ### requirements.txt
 
 ```text
-numpy>=1.26,<3.0
+# Use the CUDA 12.1 PyTorch wheel index for RTX 5070 compatibility
+--extra-index-url https://download.pytorch.org/whl/cu121
+
+numpy>=1.26,<2.0
 pandas>=2.2,<3.0
 pillow>=10.3,<11.0
-torch>=2.2
-torchvision>=0.17
+torch==2.5.1+cu121
+torchvision==0.19.0+cu121
 fastapi>=0.110
 uvicorn>=0.27
 scikit-learn>=1.4
 opencv-python>=4.9
 albumentations>=1.4
 requests>=2.31.0
+```
+
+Install the environment with GPU-compatible PyTorch using:
+
+```powershell
+pip install -r requirements.txt
+```
+
+If you need to force the CUDA wheel source explicitly, use:
+
+```powershell
+pip install --extra-index-url https://download.pytorch.org/whl/cu121 -r requirements.txt
 ```
 
 ---
