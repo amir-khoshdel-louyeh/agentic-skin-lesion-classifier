@@ -1,4 +1,5 @@
 ﻿import argparse
+import ast
 import json
 import shutil
 import subprocess
@@ -208,6 +209,33 @@ def response_is_incomplete(payload_text: str) -> bool:
         "no analysis could be performed",
     ]
     return any(marker in lower_text for marker in incomplete_markers)
+
+
+def load_metadata(raw_metadata: Optional[str]) -> Optional[Dict[str, Any]]:
+    if not raw_metadata:
+        return None
+
+    cleaned = raw_metadata.strip()
+    if len(cleaned) >= 2 and cleaned[0] == cleaned[-1] == "'":
+        cleaned = cleaned[1:-1].strip()
+
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+
+    try:
+        parsed = ast.literal_eval(cleaned)
+        if isinstance(parsed, dict):
+            return parsed
+    except (ValueError, SyntaxError):
+        pass
+
+    try:
+        maybe_json = cleaned.replace("'", '"')
+        return json.loads(maybe_json)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid metadata JSON: {exc}. Received: {raw_metadata}") from exc
 
 
 def build_chat_prompt(
@@ -451,11 +479,11 @@ def main() -> None:
             image_path = args.image_path or input("Image path: ").strip()
             metadata = None
             if args.metadata:
-                metadata = json.loads(args.metadata)
+                metadata = load_metadata(args.metadata)
             else:
                 raw_metadata = input("Metadata JSON (or blank): ").strip()
                 if raw_metadata:
-                    metadata = json.loads(raw_metadata)
+                    metadata = load_metadata(raw_metadata)
             prompt_text = args.prompt or input("Initial prompt: ").strip()
             record = {
                 "image_path": image_path,
