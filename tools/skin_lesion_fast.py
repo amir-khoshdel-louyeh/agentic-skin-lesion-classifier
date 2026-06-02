@@ -20,6 +20,10 @@ LABEL_MAP = {
 
 SUPPORTED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".gif"}
 
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+if DEVICE.type == "cuda":
+    torch.backends.cudnn.benchmark = True
+
 
 def validate_image_path(image_path: str) -> dict:
     path = Path(image_path)
@@ -102,14 +106,13 @@ def process_image(image_path: str, target_size: int = 224):
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
 
-    return transform_pipeline(padded_image).unsqueeze(0)
+    return transform_pipeline(padded_image).unsqueeze(0).to(DEVICE)
 
 
 def get_model(model_name: str, num_classes: int = 7):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     try:
         model = timm.create_model(model_name, pretrained=True, num_classes=num_classes)
-        model = model.to(device)
+        model = model.to(DEVICE)
         model.eval()
         return model
     except Exception as exc:
@@ -117,9 +120,8 @@ def get_model(model_name: str, num_classes: int = 7):
 
 
 def run_inference(model, image_tensor):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     with torch.no_grad():
-        tensor_input = image_tensor.to(device)
+        tensor_input = image_tensor.to(DEVICE, non_blocking=True)
         outputs = model(tensor_input)
         return torch.softmax(outputs, dim=1)
 
