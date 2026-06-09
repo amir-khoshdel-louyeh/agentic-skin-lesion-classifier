@@ -15,11 +15,13 @@ DEFAULT_OPENCLAW_PROMPT = textwrap.dedent(
     """
     You are an OpenClaw orchestrator for skin lesion analysis.
     A new record has arrived containing an image path, optional metadata, and a clinical prompt.
-    Use the local CLI scripts listed in the helper manifest.
-    Execute the exact command shown in the helper manifest, then return a final concise Markdown clinical report.
+    Use only the local CLI scripts listed in the helper manifest.
+    Execute the exact command shown in the helper manifest and return only the command output and a final concise Markdown clinical report.
     Do not produce planning text, progress updates, or still running language.
     Do not include any intermediate monitoring commentary.
     Do not say the tool is running or that you will wait; instead, execute the tool immediately and respond only once it has finished.
+    Do not preface the response with any explanation such as "The command is now executing" or "I will check the result shortly.".
+    The response must begin with the exact command in a shell code block, then the output produced by that command, and then the final report.
     If the first tool returns low confidence, automatically escalate to the more accurate tool.
     """
 )
@@ -176,7 +178,24 @@ def run_openclaw_cli(prompt: str, agent_id: str = "main", show_command: bool = T
             ) from exc
 
 
+def response_has_final_report(payload_text: str) -> bool:
+    if not isinstance(payload_text, str):
+        return False
+    lower_text = payload_text.lower()
+    final_markers = [
+        "**result:**",
+        "the result from",
+        "command executed:",
+        "executing the exact command",
+        "final concise markdown clinical report",
+        "final report",
+    ]
+    return any(marker in lower_text for marker in final_markers)
+
+
 def response_is_incomplete(payload_text: str) -> bool:
+    if response_has_final_report(payload_text):
+        return False
     if not isinstance(payload_text, str):
         return True
     lower_text = payload_text.lower()
@@ -286,20 +305,35 @@ def build_correction_prompt(
     previous_response: str,
     tool_helper_file: Optional[Path] = None,
 ) -> str:
-    base_prompt = build_prompt(record, tool_helper_file=tool_helper_file)
+    metadata = record.get("metadata")
+    metadata_section = ""
+    if metadata is not None:
+        pretty_metadata = json.dumps(metadata, indent=2, ensure_ascii=False)
+        metadata_section = f"\nMetadata:\n{pretty_metadata}\n"
+
+    image_path = record["image_path"]
+    prompt_text = record["prompt"]
+    helper_section = ""
+    if tool_helper_file is not None:
+        helper_text = load_tool_helper(tool_helper_file)
+        if helper_text:
+            helper_section = f"\nAvailable local tools:\n{helper_text}\n"
+
     return textwrap.dedent(
         f"""
-        {base_prompt}
+        {DEFAULT_OPENCLAW_PROMPT}
 
-        The previous OpenClaw response was not a valid final report. It used planning, debugging, or waiting language instead of returning a completed clinical result.
+        Image path: {image_path}
+        {metadata_section}
+        User prompt: {prompt_text}
+        {helper_section}
+
+        The previous response was not a valid final report.
         Retry the task once and return only the final concise Markdown clinical report with the exact command that was executed.
         Do not say the tool is running, that you are waiting, or that you will continue monitoring.
         Do not explain shell quoting or syntax issues; instead, execute the tool command exactly and show the actual output.
         If the tool fails, print the raw tool error output and do not hallucinate a diagnosis.
         Use the same available local tools and escalate if needed.
-
-        Previous response:
-        {previous_response}
         """
     )
 
