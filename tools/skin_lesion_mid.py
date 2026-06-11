@@ -2,6 +2,7 @@ import argparse
 import ast
 import json
 import re
+import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
 from PIL import Image, ImageOps
@@ -21,9 +22,41 @@ LABEL_MAP = {
 
 SUPPORTED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".gif"}
 
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-if DEVICE.type == "cuda":
-    torch.backends.cudnn.benchmark = True
+SUPPORTED_CUDA_SM = {
+    (5, 0),
+    (6, 0),
+    (6, 1),
+    (7, 0),
+    (7, 5),
+    (8, 0),
+    (8, 6),
+    (9, 0),
+}
+
+DEVICE = torch.device("cpu")
+
+
+def select_cuda_device() -> torch.device:
+    if not torch.cuda.is_available():
+        raise RuntimeError(
+            "GPU is not available: no CUDA-compatible device was found. "
+            "Install a CUDA-capable PyTorch build or run on a supported GPU."
+        )
+
+    try:
+        capability = torch.cuda.get_device_capability()
+    except Exception as exc:
+        raise RuntimeError(
+            f"Unable to determine CUDA device capability: {exc}"
+        ) from exc
+
+    if capability not in SUPPORTED_CUDA_SM:
+        raise RuntimeError(
+            f"CUDA device compute capability sm_{capability[0]}{capability[1]} "
+            "is not supported by the installed PyTorch build."
+        )
+
+    return torch.device("cuda")
 
 
 def validate_image_path(image_path: str) -> dict:
@@ -186,6 +219,14 @@ def main() -> int:
     try:
         metadata = parse_metadata(args.metadata)
     except ValueError as exc:
+        print(json.dumps({"status": "error", "message": str(exc)}, indent=2, ensure_ascii=False))
+        return 1
+
+    global DEVICE
+    try:
+        DEVICE = select_cuda_device()
+        torch.backends.cudnn.benchmark = True
+    except RuntimeError as exc:
         print(json.dumps({"status": "error", "message": str(exc)}, indent=2, ensure_ascii=False))
         return 1
 
