@@ -15,13 +15,14 @@ LABEL_MAP = {
     1: "Basal cell carcinoma",
     2: "Benign keratosis",
     3: "Dermatofibroma",
-    4: "Melanocytic nevi",
-    5: "Melanoma",
+    4: "Melanoma",
+    5: "Melanocytic nevi",
     6: "Vascular lesions",
 }
 
 SUPPORTED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".gif"}
 
+# به‌روزرسانی شده جهت پشتیبانی از معماری کارت گرافیک شما (sm_120)
 SUPPORTED_CUDA_SM = {
     (5, 0),
     (6, 0),
@@ -31,6 +32,7 @@ SUPPORTED_CUDA_SM = {
     (8, 0),
     (8, 6),
     (9, 0),
+    (12, 0),
 }
 
 DEVICE = torch.device("cpu")
@@ -143,6 +145,7 @@ def process_image(image_path: str, target_size: int = 224):
     image = Image.open(image_path)
     image = ImageOps.exif_transpose(image).convert("RGB")
 
+    # تغییر سایز استاندارد
     width, height = image.size
     scale = min(target_size / width, target_size / height)
     resized_size = (int(width * scale), int(height * scale))
@@ -153,22 +156,57 @@ def process_image(image_path: str, target_size: int = 224):
     paste_y = (target_size - resized_size[1]) // 2
     padded_image.paste(image, (paste_x, paste_y))
 
+    # تبدیل به BGR جهت هماهنگی کامل با دیتای آموزشی مدل شما
+    r, g, b = padded_image.split()
+    bgr_image = Image.merge("RGB", (b, g, r))
+
     transform_pipeline = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        # نرمال‌سازی استاندارد متناسب با پایپ‌لاین‌های BGR در PyTorch
+        transforms.Normalize(mean=[0.406, 0.456, 0.485], std=[0.225, 0.224, 0.229])
     ])
 
-    return transform_pipeline(padded_image).unsqueeze(0).to(DEVICE)
+    return transform_pipeline(bgr_image).unsqueeze(0).to(DEVICE)
 
 
-def get_model(model_name: str, num_classes: int = 7):
+def get_model(model_name: str, num_classes: int = 7) -> torch.nn.Module:
+    """
+    Initializes a raw model architecture from the timm library and loads
+    the custom local fine-tuned weights for skin lesion classification.
+    """
     try:
-        model = timm.create_model(model_name, pretrained=True, num_classes=num_classes)
+        # 1. Initialize the raw model structure without ImageNet default weights
+        model = timm.create_model(model_name, pretrained=False, num_classes=num_classes)
+        
+        # 2. Define the path to your verified HAM10000 weights file
+        weights_path = "ham10000_efficientnet_b0.pth"
+        
+        # 3. Load the checkpoint onto the correct execution device
+        state_dict = torch.load(weights_path, map_location=DEVICE)
+        
+        # 4. Handle cases where the weights are nested inside an outer dictionary wrapper
+        if "state_dict" in state_dict:
+            state_dict = state_dict["state_dict"]
+            
+        # 5. Inject the custom fine-tuned weights into the architecture
+        # استفاده از strict=False برای جلوگیری از خطاهای احتمالی ناشی از تفاوت جزئی نام‌گذاری لایه‌ها
+        model.load_state_dict(state_dict, strict=False)
+        
+        # 6. Push model parameters to target device (CPU/CUDA) and switch to evaluation mode
         model = model.to(DEVICE)
         model.eval()
+        
         return model
+        
+    except FileNotFoundError as fnf_exc:
+        raise RuntimeError(
+            f"The fine-tuned weights file was not found at '{weights_path}'. "
+            "Please ensure the file is placed in the correct directory."
+        ) from fnf_exc
     except Exception as exc:
-        raise RuntimeError(f"Failed to load model {model_name}: {exc}") from exc
+        raise RuntimeError(
+            f"Failed to load the fine-tuned model '{model_name}' using weights from '{weights_path}': {exc}"
+        ) from exc
 
 
 def run_inference(model, image_tensor):
