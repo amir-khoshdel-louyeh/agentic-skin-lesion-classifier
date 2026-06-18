@@ -6,8 +6,66 @@
 # {"image_path":"test.jpg","metadata":"{\"patient_id\":\"A001\",\"age\":45,\"sex\":\"female\"}","prompt":"Is this an skin cancer?"}
 
 
+# MEL: 0 1 2
+{"image_path":"C:\Amir\GitHub\agentic-skin-lesion-classifier\dataset\ISIC2019\ISIC_0000002","metadata":"{\"patient_id\":\"A001\",\"age\":60,\"sex\":\"female\"}","prompt":"Is this an skin cancer?"}
+{"image_path":"C:\Amir\GitHub\agentic-skin-lesion-classifier\dataset\ISIC2019\ISIC_0000013","metadata":"{\"patient_id\":\"A001\",\"age\":30,\"sex\":\"female\"}","prompt":"Is this an skin cancer?"}
+{"image_path":"C:\Amir\GitHub\agentic-skin-lesion-classifier\dataset\ISIC2019\ISIC_0000074","metadata":"{\"patient_id\":\"A001\",\"age\":25,\"sex\":\"male\"}","prompt":"Is this an skin cancer?"}
 
-{"image_path":"ISIC_0024329","metadata":"{\"patient_id\":\"A001\",\"age\":75,\"sex\":\"female\"}","prompt":"Is this an skin cancer?"}
 
-{"image_path":"ISIC_0024331","metadata":"{\"patient_id\":\"A002\",\"age\":65,\"sex\":\"male\"}","prompt":"Is this an skin cancer?"}
+# NV: 3 4 5
+{"image_path":"C:\Amir\GitHub\agentic-skin-lesion-classifier\dataset\ISIC2019\ISIC_0000000","metadata":"{\"patient_id\":\"A001\",\"age\":55,\"sex\":\"female\"}","prompt":"Is this an skin cancer?"}
+{"image_path":"C:\Amir\GitHub\agentic-skin-lesion-classifier\dataset\ISIC2019\ISIC_0000001","metadata":"{\"patient_id\":\"A001\",\"age\":30,\"sex\":\"female\"}","prompt":"Is this an skin cancer?"}
+{"image_path":"C:\Amir\GitHub\agentic-skin-lesion-classifier\dataset\ISIC2019\ISIC_0000003","metadata":"{\"patient_id\":\"A001\",\"age\":30,\"sex\":\"male\"}","prompt":"Is this an skin cancer?"}
+
+
+# BCC: 6 7 8 
+{"image_path":"C:\Amir\GitHub\agentic-skin-lesion-classifier\dataset\ISIC2019\ISIC_0024345","metadata":"{\"patient_id\":\"A001\",\"age\":85,\"sex\":\"male\"}","prompt":"Is this an skin cancer?"}
+{"image_path":"C:\Amir\GitHub\agentic-skin-lesion-classifier\dataset\ISIC2019\ISIC_0025509","metadata":"{\"patient_id\":\"A001\",\"age\":55,\"sex\":\"male\"}","prompt":"Is this an skin cancer?"}
+{"image_path":"C:\Amir\GitHub\agentic-skin-lesion-classifier\dataset\ISIC2019\ISIC_0025513","metadata":"{\"patient_id\":\"A001\",\"age\":40,\"sex\":\"male\"}","prompt":"Is this an skin cancer?"}
+
+
+# AK: 9 10 11
+{"image_path":"C:\Amir\GitHub\agentic-skin-lesion-classifier\dataset\ISIC2019\ISIC_0056166","metadata":"{\"patient_id\":\"A001\",\"age\":65,\"sex\":\"female\"}","prompt":"Is this an skin cancer?"}
+{"image_path":"C:\Amir\GitHub\agentic-skin-lesion-classifier\dataset\ISIC2019\ISIC_0056176","metadata":"{\"patient_id\":\"A001\",\"age\":80,\"sex\":\"male\"}","prompt":"Is this an skin cancer?"}
+{"image_path":"C:\Amir\GitHub\agentic-skin-lesion-classifier\dataset\ISIC2019\ISIC_0056302","metadata":"{\"patient_id\":\"A001\",\"age\":55,\"sex\":\"female\"}","prompt":"Is this an skin cancer?"}
+
+
+# BKL: 12 13 14
+{"image_path":"C:\Amir\GitHub\agentic-skin-lesion-classifier\dataset\ISIC2019\ISIC_0025758","metadata":"{\"patient_id\":\"A001\",\"age\":45,\"sex\":\"female\"}","prompt":"Is this an skin cancer?"}
+{"image_path":"C:\Amir\GitHub\agentic-skin-lesion-classifier\dataset\ISIC2019\ISIC_0025767","metadata":"{\"patient_id\":\"A001\",\"age\":70,\"sex\":\"male\"}","prompt":"Is this an skin cancer?"}
+{"image_path":"C:\Amir\GitHub\agentic-skin-lesion-classifier\dataset\ISIC2019\ISIC_0025781","metadata":"{\"patient_id\":\"A001\",\"age\":75,\"sex\":\"male\"}","prompt":"Is this an skin cancer?"}
+
+
+# DF: 15 16 17
+{"image_path":"C:\Amir\GitHub\agentic-skin-lesion-classifier\dataset\ISIC2019\ISIC_0025302","metadata":"{\"patient_id\":\"A001\",\"age\":60,\"sex\":\"female\"}","prompt":"Is this an skin cancer?"}
+{"image_path":"C:\Amir\GitHub\agentic-skin-lesion-classifier\dataset\ISIC2019\ISIC_0025314","metadata":"{\"patient_id\":\"A001\",\"age\":35,\"sex\":\"female\"}","prompt":"Is this an skin cancer?"}
+{"image_path":"C:\Amir\GitHub\agentic-skin-lesion-classifier\dataset\ISIC2019\ISIC_0025504","metadata":"{\"patient_id\":\"A001\",\"age\":50,\"sex\":\"female\"}","prompt":"Is this an skin cancer?"}
+
+
+# VASC: 18 19 20
+{"image_path":"C:\Amir\GitHub\agentic-skin-lesion-classifier\dataset\ISIC2019\ISIC_0029099","metadata":"{\"patient_id\":\"A001\",\"age\":70,\"sex\":\"female\"}","prompt":"Is this an skin cancer?"}
+{"image_path":"C:\Amir\GitHub\agentic-skin-lesion-classifier\dataset\ISIC2019\ISIC_0024370","metadata":"{\"patient_id\":\"A001\",\"age\":55,\"sex\":\"male\"}","prompt":"Is this an skin cancer?"}
+{"image_path":"C:\Amir\GitHub\agentic-skin-lesion-classifier\dataset\ISIC2019\ISIC_0024375","metadata":"{\"patient_id\":\"A001\",\"age\":70,\"sex\":\"female\"}","prompt":"Is this an skin cancer?"}
+
+
+# SCC: 21 22 23
+{"image_path":"C:\Amir\GitHub\agentic-skin-lesion-classifier\dataset\ISIC2019\ISIC_0073223","metadata":"{\"patient_id\":\"A001\",\"age\":80,\"sex\":\"female\"}","prompt":"Is this an skin cancer?"}
+{"image_path":"C:\Amir\GitHub\agentic-skin-lesion-classifier\dataset\ISIC2019\ISIC_0024418","metadata":"{\"patient_id\":\"A001\",\"age\":75,\"sex\":\"female\"}","prompt":"Is this an skin cancer?"}
+{"image_path":"C:\Amir\GitHub\agentic-skin-lesion-classifier\dataset\ISIC2019\ISIC_0024450","metadata":"{\"patient_id\":\"A001\",\"age\":50,\"sex\":\"male\"}","prompt":"Is this an skin cancer?"}
+
+
+
+# MEL:	{ISIC_0000002 , ISIC_0000013 , ISIC_0000074} B
+# NV:	{ISIC_0000000 , ISIC_0000001 , ISIC_0000003} C
+# BCC:	{ISIC_0024345 , ISIC_0025509 , ISIC_0025513} D
+# AK:	{ISIC_0056166 , ISIC_0056176 , ISIC_0056302} E
+# BKL:	{ISIC_0025758 , ISIC_0025767 , ISIC_0025781} F
+# DF:	{ISIC_0025302 , ISIC_0025314 , ISIC_0025504} G
+# VASC:	{ISIC_0029099 , ISIC_0024370 , ISIC_0024375} H
+# SCC:	{ISIC_0073223 , ISIC_0024418 , ISIC_0024450} I
+# UNK:	{No}
+
+
+
+
 
