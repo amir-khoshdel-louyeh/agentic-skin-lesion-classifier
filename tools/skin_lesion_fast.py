@@ -178,18 +178,18 @@ def get_model(model_name: str, num_classes: int = 7) -> torch.nn.Module:
         # 1. Initialize the raw model structure without ImageNet default weights
         model = timm.create_model(model_name, pretrained=False, num_classes=num_classes)
         
-        # 2. Define the path to your verified HAM10000 weights file
-        weights_path = "ham10000_efficientnet_b0.pth"
+        # 2. محاسبه دقیق و پویا مسیر فایل وزن در پوشه ابزارها
+        base_dir = Path(__file__).resolve().parent
+        weights_path = base_dir / "ham10000_efficientnet_b0.pth"
         
         # 3. Load the checkpoint onto the correct execution device
-        state_dict = torch.load(weights_path, map_location=DEVICE)
+        state_dict = torch.load(str(weights_path), map_location=DEVICE)
         
         # 4. Handle cases where the weights are nested inside an outer dictionary wrapper
         if "state_dict" in state_dict:
             state_dict = state_dict["state_dict"]
             
         # 5. Inject the custom fine-tuned weights into the architecture
-        # استفاده از strict=False برای جلوگیری از خطاهای احتمالی ناشی از تفاوت جزئی نام‌گذاری لایه‌ها
         model.load_state_dict(state_dict, strict=False)
         
         # 6. Push model parameters to target device (CPU/CUDA) and switch to evaluation mode
