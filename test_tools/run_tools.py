@@ -139,7 +139,7 @@ def main():
     config_file = os.path.join(ROOT_DIR, "prompt.txt")
     script_fast = "skin_lesion_fast.py"
     script_mid = "skin_lesion_mid.py"
-    script_high = "skin-lesion-high.py"
+    script_high = "skin_lesion_high.py"
 
     print("📌 Loading configuration from prompt.txt...")
     test_cases = parse_config(config_file)
