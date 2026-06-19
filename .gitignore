@@ -48,7 +48,6 @@ dataset/
 *.csv
 *.h5
 *.pt
-*.pth
 *.ckpt
 *.onnx
 *.safetensors
