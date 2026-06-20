@@ -32,28 +32,19 @@ def select_cuda_device() -> torch.device:
         pass
     return torch.device("cpu")
 
-def get_high_tier_vit_model(device):
-    """
-    لود کاملاً آفلاین مدل غول‌پیکر ViT-Large آموزش‌دیده روی HAM10000
-    """
-    print("⏳ Loading Offline SOTA ViT-Large (300M params) from local folder...", file=sys.stderr)
-    
+def get_high_tier_model(device):
+    print("⏳ Loading Offline SOTA ViT-Large from models/offline_high...", file=sys.stderr)
     from transformers import AutoModelForImageClassification
     
-    # آدرس پوشه محل ذخیره فایل‌های دانلود شده
-    local_model_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "offline_vit"))
+    # اصلاح مسیر برای همخوانی با ساختار کلی پروژه
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    local_model_path = os.path.join(BASE_DIR, "models", "offline_high")
     
     if not os.path.exists(local_model_path):
-        print(json.dumps({"status": "error", "message": f"Local model folder missing at: {local_model_path}"}))
+        print(json.dumps({"status": "error", "message": f"Local high model folder missing at: {local_model_path}"}))
         sys.exit(1)
         
-    # لود ۱۰۰٪ آفلاین بدون نیاز به اینترنت یا توکن
     model = AutoModelForImageClassification.from_pretrained(local_model_path, local_files_only=True)
-    
-    # اطمینان از انطباق لایه نهایی
-    if model.config.num_labels != len(CLASSES):
-        model.classifier = nn.Linear(model.config.hidden_size, len(CLASSES))
-        
     model.to(device)
     model.eval()
     return model
@@ -83,7 +74,7 @@ def main():
         raw_image = ImageOps.exif_transpose(raw_image).convert("RGB")
         image_tensor = transform_pipeline(raw_image).unsqueeze(0).to(DEVICE)
 
-        model = get_high_tier_vit_model(DEVICE)
+        model = get_high_tier_model(DEVICE)
 
         with torch.no_grad():
             outputs = model(image_tensor)
