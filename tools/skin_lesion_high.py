@@ -36,7 +36,6 @@ def get_high_tier_model(device):
     print("⏳ Loading Offline SOTA ViT-Large from models/offline_high...", file=sys.stderr)
     from transformers import AutoModelForImageClassification
     
-    # اصلاح مسیر برای همخوانی با ساختار کلی پروژه
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     local_model_path = os.path.join(BASE_DIR, "models", "offline_high")
     
@@ -62,7 +61,15 @@ def main():
         print(json.dumps({"status": "error", "message": f"Image not found: {args.image_path}"}))
         sys.exit(1)
 
-    # پایپ‌لاین پیش‌پردازش استاندارد رزولوشن ۲۲۴ برای مدل‌های ترنسفورمری گوگل
+    # پردازش ایمن متادیتا (سازگار با JSONL)
+    metadata_json = {}
+    if args.metadata:
+        try:
+            metadata_json = json.loads(args.metadata)
+        except json.JSONDecodeError:
+            metadata_json = {"error": "Invalid metadata format"}
+
+    # پایپ‌لاین پیش‌پردازش
     transform_pipeline = transforms.Compose([
         transforms.Resize((224, 224), interpolation=transforms.InterpolationMode.BICUBIC),
         transforms.ToTensor(),
@@ -83,13 +90,6 @@ def main():
             confidence, class_idx = torch.max(probabilities, dim=0)
 
         idx = int(class_idx.item())
-
-        metadata_json = {}
-        if args.metadata:
-            try:
-                metadata_json = json.loads(args.metadata.replace("'", '"'))
-            except Exception:
-                pass
 
         result = {
             "status": "success",
