@@ -53,7 +53,7 @@ dataset/
 *.safetensors
 
 # Model artifacts / outputs
-model/
+models/
 checkpoints/
 outputs/
 output/
@@ -84,4 +84,5 @@ openclaw.jason
 test.jpg
 proposal.md
 help.md
+
 
