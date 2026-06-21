@@ -9,7 +9,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-DEFAULT_PROMPT_FILE = Path("prompt.txt")
+DEFAULT_PROMPT_FILE = Path("prompt.jason")
 DEFAULT_TOOL_HELP_FILE = Path("tool_manifest.md")
 DEFAULT_OPENCLAW_PROMPT = textwrap.dedent(
     """
@@ -31,27 +31,23 @@ def load_prompt_records(prompt_file: Path) -> List[Dict[str, Any]]:
     if not prompt_file.exists():
         raise FileNotFoundError(f"Prompt file not found: {prompt_file}")
 
-    records: List[Dict[str, Any]] = []
-    for raw_line in prompt_file.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-
-        try:
-            record = json.loads(line)
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"Invalid JSON record in {prompt_file}: {exc}\nLine: {line}") from exc
-
-        if "image_path" not in record or "prompt" not in record:
-            raise ValueError(
-                "Each record must contain at least 'image_path' and 'prompt' fields."
-            )
-
-        records.append(record)
-
+    records = []
+    # فایل را خط به خط می‌خوانیم
+    with open(prompt_file, 'r', encoding='utf-8') as f:
+        for line_num, line in enumerate(f, 1):
+            line = line.strip()
+            if not line: # نادیده گرفتن خطوط خالی
+                continue
+            try:
+                # هر خط یک JSON معتبر است
+                record = json.loads(line)
+                records.append(record)
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"Invalid JSON at line {line_num}: {exc}")
+    
     if not records:
-        raise ValueError(f"No valid prompt records found in {prompt_file}")
-
+        raise ValueError("File is empty or contains no valid JSON.")
+        
     return records
 
 
@@ -150,7 +146,7 @@ def run_openclaw_cli(prompt: str, agent_id: str = "main", show_command: bool = T
                 text=True,
                 encoding="utf-8",
                 errors="replace",
-                timeout=600,
+                timeout=1200,
             )
         except subprocess.TimeoutExpired as exc:
             raise RuntimeError(
