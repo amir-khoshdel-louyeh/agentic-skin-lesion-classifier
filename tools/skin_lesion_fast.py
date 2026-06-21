@@ -55,6 +55,16 @@ def main():
         print(json.dumps({"status": "error", "message": f"Image not found: {args.image_path}"}))
         sys.exit(1)
 
+    # پردازش ایمن متادیتا
+    metadata_json = {}
+    if args.metadata:
+        try:
+            # چون حالا خروجی ایجنت دقیق است، مستقیم آن را پارس می‌کنیم
+            metadata_json = json.loads(args.metadata)
+        except json.JSONDecodeError as e:
+            # اگر فرمت اشتباه بود، یک خطا در خروجی می‌گذاریم ولی سیستم ادامه می‌دهد
+            metadata_json = {"error": "Invalid metadata format", "raw": args.metadata}
+
     try:
         raw_image = Image.open(args.image_path)
         raw_image = ImageOps.exif_transpose(raw_image).convert("RGB")
@@ -62,7 +72,7 @@ def main():
         # لود مدل و پردازشگر
         model, processor = get_fast_tier_model(DEVICE)
         
-        # پیش‌پردازش خودکار متناسب با معماری ConvNeXt
+        # پیش‌پردازش
         inputs = processor(images=raw_image, return_tensors="pt").to(DEVICE)
 
         with torch.no_grad():
@@ -73,19 +83,13 @@ def main():
 
         idx = int(class_idx.item())
 
-        metadata_json = {}
-        if args.metadata:
-            try:
-                metadata_json = json.loads(args.metadata.replace("'", '"'))
-            except Exception: pass
-
         result = {
             "status": "success",
             "tool": "skin-lesion-fast",
             "model_tier": "tier1_fast",
             "model_executed": "convnext_small_skin_lesion_offline",
             "predicted_class_index": idx,
-            "disease_name": CLASSES[idx] if idx < len(CLASSES) else "Unknown Condition",
+            "disease_name": CLASSES[idx] if idx < len(CLASSES) else "Unknown",
             "confidence_score": round(float(confidence.item()), 4),
             "metadata": metadata_json
         }
