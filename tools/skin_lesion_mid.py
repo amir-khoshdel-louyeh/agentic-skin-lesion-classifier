@@ -37,9 +37,11 @@ def get_mid_tier_model(device):
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     local_model_path = os.path.join(BASE_DIR, "models", "offline_mid")
     
-    # لود کاملاً استاندارد و هوشمند
+    if not os.path.exists(local_model_path):
+        print(json.dumps({"status": "error", "message": f"Mid-tier model folder missing at: {local_model_path}"}))
+        sys.exit(1)
+
     model = AutoModelForImageClassification.from_pretrained(local_model_path, local_files_only=True)
-    
     model.to(device)
     model.eval()
     return model
@@ -57,7 +59,15 @@ def main():
         print(json.dumps({"status": "error", "message": f"Image not found: {args.image_path}"}))
         sys.exit(1)
 
-    # پیش‌پردازش محلی منطبق بر استانداردهای ResNet
+    # پردازش ایمن متادیتا (هماهنگ با فرمت JSONL)
+    metadata_json = {}
+    if args.metadata:
+        try:
+            metadata_json = json.loads(args.metadata)
+        except json.JSONDecodeError:
+            metadata_json = {"error": "Invalid metadata format"}
+
+    # پیش‌پردازش منطبق بر استانداردهای ResNet
     transform_pipeline = transforms.Compose([
         transforms.Resize((224, 224), interpolation=transforms.InterpolationMode.BICUBIC),
         transforms.ToTensor(),
@@ -78,13 +88,6 @@ def main():
             confidence, class_idx = torch.max(probabilities, dim=0)
 
         idx = int(class_idx.item())
-
-        metadata_json = {}
-        if args.metadata:
-            try:
-                metadata_json = json.loads(args.metadata.replace("'", '"'))
-            except Exception:
-                pass
 
         result = {
             "status": "success",
