@@ -1,38 +1,37 @@
-### # Local Tool Command Helper (Updated)
+# Local Tool Command Helper & Manifest
 
-**Available local CLI tools:**
+You have access to the following local CLI tools for skin lesion analysis. You must invoke them using exact absolute paths and forward slashes as defined below.
 
-1. `python C:/Amir/GitHub/agentic-skin-lesion-classifier/tools/skin_lesion_fast.py --image <path> [--metadata <json>]`
+## Available Core Tools
+
+### 1. Tier 1: Fast Screening Classifier
+* **Command:** `python C:/Amir/GitHub/agentic-skin-lesion-classifier/tools/skin_lesion_fast.py --image <path> [--metadata <json>]`
 * **Model:** ConvNeXt-Small (Optimized for speed)
-* **Purpose:** First-pass screening (High speed)
+* **Purpose:** Initial first-pass screening.
 
-
-2. `python C:/Amir/GitHub/agentic-skin-lesion-classifier/tools/skin_lesion_mid.py --image <path> [--metadata <json>]`
+### 2. Tier 2: Mid Verification Classifier
+* **Command:** `python C:/Amir/GitHub/agentic-skin-lesion-classifier/tools/skin_lesion_mid.py --image <path> [--metadata <json>]`
 * **Model:** Swin-Tiny (Balanced accuracy)
-* **Purpose:** Reliable secondary verification
+* **Purpose:** Reliable secondary verification for ambiguous cases.
 
-
-3. `python C:/Amir/GitHub/agentic-skin-lesion-classifier/tools/skin_lesion_high.py --image <path> [--metadata <json>]`
+### 3. Tier 3: High Precision Classifier
+* **Command:** `python C:/Amir/GitHub/agentic-skin-lesion-classifier/tools/skin_lesion_high.py --image <path> [--metadata <json>]`
 * **Model:** ViT-Large (SOTA accuracy)
-* **Purpose:** Critical analysis for low-confidence results
-
-
+* **Purpose:** Critical analysis required only when lower tiers return sub-threshold confidence.
 
 ---
 
-### **Execution Guidance:**
+## Execution & Escalation Protocol
 
-* **Strategy:**
-* **Level 1 (Fast):** Always start with `skin_lesion_fast.py`. This layer is sufficient for the majority of images and is highly performant.
-* **Level 2 (Escalation):** If the `confidence_score` from the Fast tier is below **0.75**, execute `skin_lesion_mid.py` for secondary verification.
-* **Level 3 (Critical):** If the Mid tier result remains ambiguous (Confidence < 0.70) or if the user explicitly requests high clinical precision, execute `skin_lesion_high.py`.
+You must strictly follow this multi-tiered escalation logic based on the tool outputs:
 
+1. **Step 1 (Initial Run):** Always invoke `skin_lesion_fast.py` first.
+2. **Step 2 (First Escalation):** Check the `confidence_score` in the JSON output of the Fast tool. If `confidence_score` is **less than 0.75**, you must immediately escalate and execute `skin_lesion_mid.py`.
+3. **Step 3 (Critical Escalation):** Check the output of the Mid tool. If the confidence remains low (**less than 0.70**), or if the user prompt explicitly demands maximum clinical rigor, escalate to `skin_lesion_high.py`.
 
-* **Rules:**
-* Execute the exact commands provided above. Do not invent shell aliases.
-* In the final response, clearly identify the model tier used (`tier1_fast`, `tier2_mid`, or `tier3_high`).
-* Return the final result as concise Markdown and include the exact command executed.
+## Strict Output Formatting Rules
 
-
-
----
+* **No Commentary:** Do not output any intermediate planning text, shell execution thoughts, or progress messages (e.g., "Running tool...", "Please wait...").
+* **Command Visibility:** Your final response must explicitly start with a shell code block showing the exact command that was executed.
+* **Tier Identification:** Clearly state which tier was used to generate the final result (`tier1_fast`, `tier2_mid`, or `tier3_high`).
+* **Format:** Present the final conclusion as a concise Markdown clinical report.
