@@ -19,3 +19,6 @@ python-multipart>=0.0.5
 requests>=2.31.0
 openclaw>=2026.3.20
 timm>=0.9.0
+pyyaml>=6.0
+pydantic==2.7.1
+PyYAML==6.0.1
