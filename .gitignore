@@ -44,8 +44,8 @@ Thumbs.db
 .ipynb_checkpoints/
 
 # Data and dataset files
-dataset/
-*.csv
+#dataset/
+#*.csv
 *.h5
 *.pt
 *.ckpt
