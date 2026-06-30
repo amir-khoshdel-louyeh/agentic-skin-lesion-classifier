@@ -1,24 +1,32 @@
-# Use the CUDA 13.0 PyTorch Live/Nightly wheel index for RTX 5000 (Blackwell) compatibility
---extra-index-url https://download.pytorch.org/whl/nightly/cu130
+# ==============================================================================
+# WARNING: Please make sure the following libraries are compatible with your system. 
+# Otherwise, use the version that is compatible with your system.
+# ==============================================================================
 
+# Core Data Science & Data Manipulation
 numpy>=1.26,<2.0
 pandas>=2.2,<3.0
-pillow>=10.3,<11.0
 
-# PyTorch Ecosystem (Nightly builds for sm_120 compatibility)
---pre torch
---pre torchvision
---pre torchaudio
+# Deep Learning Ecosystem (Nightly builds for sm_120 compatibility)
+torch
+torchvision
+torchaudio
+transformers==4.48.0
+timm>=0.9.0
 
-fastapi>=0.110
-uvicorn>=0.27
-scikit-learn>=1.4
+# Computer Vision & Image Augmentation
 opencv-python>=4.9
 albumentations>=1.4
+pillow>=10.3,<11.0
+
+# API, Web, and Networking
+fastapi>=0.110
+uvicorn>=0.27
 python-multipart>=0.0.5
 requests>=2.31.0
 openclaw>=2026.3.20
-timm>=0.9.0
-pyyaml>=6.0
+
+# Machine Learning Utilities & Configs
+scikit-learn>=1.4
 pydantic==2.7.1
-PyYAML==6.0.1
+pyyaml==6.0.1
