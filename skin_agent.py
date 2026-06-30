@@ -8,8 +8,16 @@ import time
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+import yaml
+from pydantic import BaseModel, ValidationError
 
-DEFAULT_PROMPT_FILE = Path("prompt.jason")
+class ClinicalMetadata(BaseModel):
+    patient_id: str
+    age: int
+    sex: str
+    #category: str
+
+DEFAULT_PROMPT_FILE = Path("prompt.yaml")
 DEFAULT_TOOL_HELP_FILE = Path("tool_manifest.md")
 DEFAULT_OPENCLAW_PROMPT = textwrap.dedent(
     """
@@ -31,24 +39,15 @@ def load_prompt_records(prompt_file: Path) -> List[Dict[str, Any]]:
     if not prompt_file.exists():
         raise FileNotFoundError(f"Prompt file not found: {prompt_file}")
 
-    records = []
-    # فایل را خط به خط می‌خوانیم
     with open(prompt_file, 'r', encoding='utf-8') as f:
-        for line_num, line in enumerate(f, 1):
-            line = line.strip()
-            if not line: # نادیده گرفتن خطوط خالی
-                continue
-            try:
-                # هر خط یک JSON معتبر است
-                record = json.loads(line)
-                records.append(record)
-            except json.JSONDecodeError as exc:
-                raise ValueError(f"Invalid JSON at line {line_num}: {exc}")
-    
-    if not records:
-        raise ValueError("File is empty or contains no valid JSON.")
-        
-    return records
+        try:
+
+            records = yaml.safe_load(f)
+            if not isinstance(records, list):
+                raise ValueError("YAML content must be a list of records.")
+            return records
+        except yaml.YAMLError as exc:
+            raise ValueError(f"Invalid YAML format: {exc}")
 
 
 def load_tool_helper(tool_helper_file: Path) -> str:
@@ -58,14 +57,20 @@ def load_tool_helper(tool_helper_file: Path) -> str:
 
 
 def build_prompt(record: Dict[str, Any], tool_helper_file: Optional[Path] = None) -> str:
-    metadata = record.get("metadata")
+    # 1. Sanitize Metadata: Remove 'category' to prevent data leakage
+    metadata = record.get("metadata", {}).copy()
+    if "category" in metadata:
+        del metadata["category"]
+    
     metadata_section = ""
-    if metadata is not None:
+    if metadata:
         pretty_metadata = json.dumps(metadata, indent=2, ensure_ascii=False)
         metadata_section = f"\nMetadata:\n{pretty_metadata}\n"
 
     image_path = record["image_path"]
-    prompt_text = record["prompt"]
+    
+    # 2. Handle optional prompt: Default to a clinical analysis task if not provided
+    prompt_text = record.get("prompt", "Analyze this skin lesion for signs of malignancy.")
 
     helper_section = ""
     if tool_helper_file is not None:
@@ -114,31 +119,31 @@ def is_transient_openclaw_error(output: str) -> bool:
 
 
 def run_openclaw_cli(prompt: str, agent_id: str = "main", show_command: bool = True) -> Dict[str, Any]:
-    session_id = f"prompt-{uuid.uuid4().hex}"
     openclaw_cmd = find_openclaw_executable()
     clean_prompt = " ".join(prompt.strip().split())
-    command = [
-        openclaw_cmd,
-        "agent",
-        "--agent",
-        agent_id,
-        "--local",
-        "--session-id",
-        session_id,
-        f"--message={clean_prompt}",
-        "--json",
-        "--thinking",
-        "off",
-    ]
-
-    if show_command:
-        print("Running OpenClaw agent command. This may take a while if the tool needs to load models.")
-        print("Command:", " ".join(command))
-    else:
-        print("Running OpenClaw agent command...")
+    
+    current_session_id = f"session-{uuid.uuid4().hex}" 
 
     max_retries = 2
-    for attempt in range(1, max_retries + 2):
+    for attempt in range(max_retries + 1):
+        # از همان session_id تولید شده استفاده کنید یا اگر نیاز دارید، اینجا تغییرش دهید
+        command = [
+            openclaw_cmd,
+            "agent",
+            "--agent",
+            agent_id,
+            "--local",
+            "--session-id",
+            current_session_id,  # استفاده از session ایزوله
+            f"--message={clean_prompt}",
+            "--json",
+            "--thinking",
+            "off",
+        ]
+
+        if show_command:
+            print("Command:", " ".join(command))
+
         try:
             result = subprocess.run(
                 command,
@@ -148,19 +153,26 @@ def run_openclaw_cli(prompt: str, agent_id: str = "main", show_command: bool = T
                 errors="replace",
                 timeout=1200,
             )
+
         except subprocess.TimeoutExpired as exc:
             raise RuntimeError(
-                "OpenClaw CLI timed out after 600 seconds. Ensure the OpenClaw gateway and local tools are running."
+                "OpenClaw CLI timed out after 1200 seconds. "
+                "Ensure the OpenClaw gateway and local tools are running."
             ) from exc
 
         if result.returncode != 0:
             stderr_text = result.stderr.strip()
             stdout_text = result.stdout.strip()
             combined = f"{stderr_text}\n{stdout_text}".strip()
-            if attempt <= max_retries and is_transient_openclaw_error(combined):
-                print(f"Transient OpenClaw error detected on attempt {attempt}; retrying...")
+
+            if attempt < max_retries and is_transient_openclaw_error(combined):
+                print(
+                    f"Transient OpenClaw error detected on attempt {attempt + 1}: {combined}. "
+                    "Retrying with a fresh session..."
+                )
                 time.sleep(2)
                 continue
+
             raise RuntimeError(
                 "OpenClaw CLI failed: "
                 + (stderr_text or stdout_text or "unknown error")
@@ -168,10 +180,13 @@ def run_openclaw_cli(prompt: str, agent_id: str = "main", show_command: bool = T
 
         try:
             return json.loads(result.stdout)
+
         except json.JSONDecodeError as exc:
             raise RuntimeError(
-                f"OpenClaw CLI returned invalid JSON: {result.stdout}"
+                f"OpenClaw CLI returned invalid JSON:\n{result.stdout}"
             ) from exc
+
+    raise RuntimeError("OpenClaw CLI failed after all retry attempts.")
 
 
 def response_has_final_report(payload_text: str) -> bool:
@@ -226,32 +241,12 @@ def response_is_incomplete(payload_text: str) -> bool:
     return any(marker in lower_text for marker in incomplete_markers)
 
 
-def load_metadata(raw_metadata: Optional[str]) -> Optional[Dict[str, Any]]:
-    if not raw_metadata:
-        return None
 
-    cleaned = raw_metadata.strip()
-    if len(cleaned) >= 2 and cleaned[0] == cleaned[-1] == "'":
-        cleaned = cleaned[1:-1].strip()
-
+def load_metadata(raw_metadata: str) -> Dict[str, Any]:
     try:
-        return json.loads(cleaned)
-    except json.JSONDecodeError:
-        pass
-
-    try:
-        parsed = ast.literal_eval(cleaned)
-        if isinstance(parsed, dict):
-            return parsed
-    except (ValueError, SyntaxError):
-        pass
-
-    try:
-        maybe_json = cleaned.replace("'", '"')
-        return json.loads(maybe_json)
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"Invalid metadata JSON: {exc}. Received: {raw_metadata}") from exc
-
+        return yaml.safe_load(raw_metadata)
+    except yaml.YAMLError as exc:
+        raise ValueError(f"Invalid YAML format: {exc}")
 
 def build_chat_prompt(
     record: Dict[str, Any],
@@ -267,14 +262,20 @@ def build_chat_prompt(
             history_lines.append(f"Assistant: {item['assistant']}")
         history_section = "\n" + "\n".join(history_lines) + "\n"
 
-    metadata = record.get("metadata")
+    # Sanitizing metadata: remove 'category'
+    metadata = record.get("metadata", {}).copy()
+    if "category" in metadata:
+        del metadata["category"]
+        
     metadata_section = ""
-    if metadata is not None:
+    if metadata:
         pretty_metadata = json.dumps(metadata, indent=2, ensure_ascii=False)
         metadata_section = f"\nMetadata:\n{pretty_metadata}\n"
 
     image_path = record["image_path"]
-    prompt_text = record["prompt"]
+    # Using .get with default to prevent KeyError
+    prompt_text = record.get("prompt", "Analyze this skin lesion for signs of malignancy.")
+
     helper_section = ""
     if tool_helper_file is not None:
         helper_text = load_tool_helper(tool_helper_file)
@@ -301,14 +302,20 @@ def build_correction_prompt(
     previous_response: str,
     tool_helper_file: Optional[Path] = None,
 ) -> str:
-    metadata = record.get("metadata")
+    # Sanitizing metadata: remove 'category'
+    metadata = record.get("metadata", {}).copy()
+    if "category" in metadata:
+        del metadata["category"]
+        
     metadata_section = ""
-    if metadata is not None:
+    if metadata:
         pretty_metadata = json.dumps(metadata, indent=2, ensure_ascii=False)
         metadata_section = f"\nMetadata:\n{pretty_metadata}\n"
 
     image_path = record["image_path"]
-    prompt_text = record["prompt"]
+    # Using .get with default to prevent KeyError
+    prompt_text = record.get("prompt", "Analyze this skin lesion for signs of malignancy.")
+    
     helper_section = ""
     if tool_helper_file is not None:
         helper_text = load_tool_helper(tool_helper_file)
@@ -394,44 +401,56 @@ def send_records_to_openclaw(
     tool_helper_file: Optional[Path] = None,
 ) -> None:
     records = load_prompt_records(prompt_file)
+    
     if record_index is not None:
         if record_index < 0 or record_index >= len(records):
             raise IndexError("record_index is out of range")
         records = [records[record_index]]
 
     for idx, record in enumerate(records):
+        # Validate metadata using Pydantic to prevent 'Invalid Metadata' errors
+        if "metadata" in record:
+            try:
+                validated_meta = ClinicalMetadata(**record["metadata"])
+                record["metadata"] = validated_meta.dict()
+            except ValidationError as e:
+                print(f"Validation Error in record {idx + 1}: Skipping... \n{e}")
+                continue
+
         print("=" * 70)
         print(f"Processing prompt record {idx + 1}/{len(records)}")
         print(f"Image path: {record['image_path']}")
 
+        # Build prompt: prompt field is now optional
         prompt = build_prompt(record, tool_helper_file=tool_helper_file)
 
+        # Execute OpenClaw CLI
         response = run_openclaw_cli(prompt, agent_id=agent_id)
+        
+        # Extract payload text
         if isinstance(response, dict) and response.get("payloads"):
-            payload_text = "\n".join(
-                item.get("text", "") for item in response["payloads"]
-            )
+            payload_text = "\n".join(item.get("text", "") for item in response["payloads"])
         else:
             payload_text = json.dumps(response, indent=2, ensure_ascii=False)
 
         print("--- OpenClaw response ---")
         print(payload_text)
 
+        # Handle incomplete responses
         if response_is_incomplete(payload_text):
-            print("OpenClaw response appears incomplete or planning-oriented. Retrying with a correction prompt.")
+            print("Response incomplete. Retrying with correction prompt...")
             correction_prompt = build_correction_prompt(record, payload_text, tool_helper_file=tool_helper_file)
             retry_response = run_openclaw_cli(correction_prompt, agent_id=agent_id)
+            
             if isinstance(retry_response, dict) and retry_response.get("payloads"):
-                payload_text = "\n".join(
-                    item.get("text", "") for item in retry_response["payloads"]
-                )
+                payload_text = "\n".join(item.get("text", "") for item in retry_response["payloads"])
             else:
                 payload_text = json.dumps(retry_response, indent=2, ensure_ascii=False)
 
             print("--- OpenClaw correction response ---")
             print(payload_text)
 
-        print("" + "=" * 70 + "\n")
+        print("=" * 70 + "\n")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -532,6 +551,17 @@ def main() -> None:
         tool_helper_file=tool_helper_path,
     )
 
+def cleanup_old_sessions():
+    # مسیر پوشه سشن‌ها (طبق آدرسی که فرستادید)
+    session_dir = Path.home() / ".openclaw" / "agents" / "main" / "sessions"
+    if session_dir.exists():
+        for file in session_dir.glob("*"):
+            try:
+                if file.is_file():
+                    file.unlink()
+            except Exception as e:
+                print(f"Could not delete {file}: {e}")
 
 if __name__ == "__main__":
+    cleanup_old_sessions()
     main()
