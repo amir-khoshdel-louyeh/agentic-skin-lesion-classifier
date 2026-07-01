@@ -1,0 +1,120 @@
+- image_path: C:/Users/AMKU/Desktop/agentic-skin-lesion-classifier/dataset/ISIC2019ISIC2019/ISIC_0000002.jpg
+  metadata:
+    patient_id: A001
+    age: 60
+    sex: female
+- image_path: C:/Users/AMKU/Desktop/agentic-skin-lesion-classifier/dataset/ISIC2019ISIC2019/ISIC_0000013.jpg
+  metadata:
+    patient_id: A001
+    age: 30
+    sex: female
+- image_path: C:/Users/AMKU/Desktop/agentic-skin-lesion-classifier/dataset/ISIC2019ISIC2019/ISIC_0000074.jpg
+  metadata:
+    patient_id: A001
+    age: 25
+    sex: male
+- image_path: C:/Users/AMKU/Desktop/agentic-skin-lesion-classifier/dataset/ISIC2019ISIC2019/ISIC_0000000.jpg
+  metadata:
+    patient_id: A001
+    age: 55
+    sex: female
+- image_path: C:/Users/AMKU/Desktop/agentic-skin-lesion-classifier/dataset/ISIC2019ISIC2019/ISIC_0000001.jpg
+  metadata:
+    patient_id: A001
+    age: 30
+    sex: female
+- image_path: C:/Users/AMKU/Desktop/agentic-skin-lesion-classifier/dataset/ISIC2019ISIC2019/ISIC_0000003.jpg
+  metadata:
+    patient_id: A001
+    age: 30
+    sex: male
+- image_path: C:/Users/AMKU/Desktop/agentic-skin-lesion-classifier/dataset/ISIC2019ISIC2019/ISIC_0024345.jpg
+  metadata:
+    patient_id: A001
+    age: 85
+    sex: male
+- image_path: C:/Users/AMKU/Desktop/agentic-skin-lesion-classifier/dataset/ISIC2019ISIC2019/ISIC_0025509.jpg
+  metadata:
+    patient_id: A001
+    age: 55
+    sex: male
+- image_path: C:/Users/AMKU/Desktop/agentic-skin-lesion-classifier/dataset/ISIC2019ISIC2019/ISIC_0025513.jpg
+  metadata:
+    patient_id: A001
+    age: 40
+    sex: male
+- image_path: C:/Users/AMKU/Desktop/agentic-skin-lesion-classifier/dataset/ISIC2019ISIC2019/ISIC_0056166.jpg
+  metadata:
+    patient_id: A001
+    age: 65
+    sex: female
+- image_path: C:/Users/AMKU/Desktop/agentic-skin-lesion-classifier/dataset/ISIC2019ISIC2019/ISIC_0056176.jpg
+  metadata:
+    patient_id: A001
+    age: 80
+    sex: male
+- image_path: C:/Users/AMKU/Desktop/agentic-skin-lesion-classifier/dataset/ISIC2019ISIC2019/ISIC_0056302.jpg
+  metadata:
+    patient_id: A001
+    age: 55
+    sex: female
+- image_path: C:/Users/AMKU/Desktop/agentic-skin-lesion-classifier/dataset/ISIC2019ISIC2019/ISIC_0025758.jpg
+  metadata:
+    patient_id: A001
+    age: 45
+    sex: female
+- image_path: C:/Users/AMKU/Desktop/agentic-skin-lesion-classifier/dataset/ISIC2019ISIC2019/ISIC_0025767.jpg
+  metadata:
+    patient_id: A001
+    age: 70
+    sex: male
+- image_path: C:/Users/AMKU/Desktop/agentic-skin-lesion-classifier/dataset/ISIC2019ISIC2019/ISIC_0025781.jpg
+  metadata:
+    patient_id: A001
+    age: 75
+    sex: male
+- image_path: C:/Users/AMKU/Desktop/agentic-skin-lesion-classifier/dataset/ISIC2019ISIC2019/ISIC_0025302.jpg
+  metadata:
+    patient_id: A001
+    age: 60
+    sex: female
+- image_path: C:/Users/AMKU/Desktop/agentic-skin-lesion-classifier/dataset/ISIC2019ISIC2019/ISIC_0025314.jpg
+  metadata:
+    patient_id: A001
+    age: 35
+    sex: female
+- image_path: C:/Users/AMKU/Desktop/agentic-skin-lesion-classifier/dataset/ISIC2019ISIC2019/ISIC_0025504.jpg
+  metadata:
+    patient_id: A001
+    age: 50
+    sex: female
+- image_path: C:/Users/AMKU/Desktop/agentic-skin-lesion-classifier/dataset/ISIC2019ISIC2019/ISIC_0029099.jpg
+  metadata:
+    patient_id: A001
+    age: 70
+    sex: female
+- image_path: C:/Users/AMKU/Desktop/agentic-skin-lesion-classifier/dataset/ISIC2019ISIC2019/ISIC_0024370.jpg
+  metadata:
+    patient_id: A001
+    age: 55
+    sex: male
+- image_path: C:/Users/AMKU/Desktop/agentic-skin-lesion-classifier/dataset/ISIC2019ISIC2019/ISIC_0024375.jpg
+  metadata:
+    patient_id: A001
+    age: 70
+    sex: female
+- image_path: C:/Users/AMKU/Desktop/agentic-skin-lesion-classifier/dataset/ISIC2019ISIC2019/ISIC_0073223.jpg
+  metadata:
+    patient_id: A001
+    age: 80
+    sex: female
+- image_path: C:/Users/AMKU/Desktop/agentic-skin-lesion-classifier/dataset/ISIC2019ISIC2019/ISIC_0024418.jpg
+  metadata:
+    patient_id: A001
+    age: 75
+    sex: female
+- image_path: C:/Users/AMKU/Desktop/agentic-skin-lesion-classifier/dataset/ISIC2019ISIC2019/ISIC_0024450.jpg
+  metadata:
+    patient_id: A001
+    age: 50
+    sex: male
