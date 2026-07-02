@@ -7,14 +7,14 @@ import sys
 import time
 from datetime import datetime
 
-# محاسبه دقیق مسیرهای پروژه به صورت پویا نسبت به محل قرارگیری این اسکریپت
+# Dynamically calculate project paths relative to this script's location
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.abspath(os.path.join(CURRENT_DIR, ".."))
 TOOLS_DIR = os.path.join(ROOT_DIR, "tools")
 
 
 def clean_and_parse_line(line):
-    """اصلاح مسیر تصویر بدون آسیب زدن به متادیتای داخلی"""
+    """Fixes image path without harming internal metadata"""
     match = re.search(r'"image_path"\s*:\s*"([^"]+)"', line)
     if match:
         raw_path = match.group(1)
@@ -52,7 +52,7 @@ def parse_config(config_path):
                 data = clean_and_parse_line(line)
 
                 image_path = data.get("image_path", "")
-                # حل مشکل آدرس‌دهی نسبی تصاویر بر اساس روت پروژه
+                # Resolve relative image addressing based on the project root
                 if image_path and not os.path.isabs(image_path):
                     image_path = os.path.abspath(
                         os.path.join(ROOT_DIR, image_path)
@@ -112,7 +112,7 @@ def run_script(script_name, image_path, metadata_str):
             stderr=subprocess.PIPE,
             text=True,
             encoding="utf-8",
-            timeout=150,  # زمان بلندتر برای هندل کردن پردازش سنگین لایه High
+            timeout=150,  # Longer timeout to handle heavy processing of the High layer
         )
         elapsed_time = time.time() - start_time
 
@@ -152,7 +152,7 @@ def main():
     results = []
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    # ذخیره فایل‌های گزارش مستقیماً درون پوشه test_tools
+    # Save report files directly within the test_tools folder
     report_txt_path = os.path.join(CURRENT_DIR, f"test_report_{timestamp}.txt")
     report_csv_path = os.path.join(CURRENT_DIR, f"test_results_{timestamp}.csv")
 
