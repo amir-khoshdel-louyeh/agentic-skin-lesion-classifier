@@ -256,12 +256,37 @@ HAM10000
 
 ## High-Level Architecture
 
-> Replace with an architecture diagram image.
+The system follows a decoupled, agent-driven orchestration architecture where the OpenClaw agent acts as a central router, evaluating incoming user prompts and dynamically invoking specialized tools based on performance and confidence requirements.
 
-```text
-[ INSERT ARCHITECTURE DIAGRAM HERE ]
-```
+```mermaid
+graph TD
+    %% Base Styles
+    classDef default fill:#f9f9f9,stroke:#333,stroke-width:1px;
+    classDef agent fill:#e1f5fe,stroke:#0288d1,stroke-width:2px;
+    classDef tool fill:#efebe9,stroke:#5d4037,stroke-width:1px;
+    classDef output fill:#e8f5e9,stroke:#388e3c,stroke-width:2px;
 
+    %% Nodes & Flow
+    User([User Input: Image + Metadata]) --> Agent{OpenClaw Agent<br>skin_agent.py}
+    
+    Agent -->|Low Latency / Fast Pass| ToolFast[Fast Screening Tool<br>tools/skin_lesion_fast.py]
+    Agent -->|High Confidence Escalation| ToolMid[Balanced Screening Tool<br>tools/skin_lesion_mid.py]
+    
+    subgraph Inference Layer [Models Framework: PyTorch & timm]
+        ToolFast --> ModelB0((EfficientNet-B0))
+        ToolMid --> ModelB4((EfficientNet-B4))
+    end
+    
+    ModelB0 --> Merge[Output Aggregator]
+    ModelB4 --> Merge
+    
+    Merge --> JSON[Structured JSON Output<br>metrics & confidence]
+    Merge --> Report[Final Markdown Report<br>clinical support doc]
+
+    %% Applying Styles
+    class Agent agent;
+    class ToolFast,ToolMid tool;
+    class JSON,Report output;
 ---
 
 ## Components
