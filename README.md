@@ -38,9 +38,9 @@ Final Markdown report
 
 ### Agent Execution Demo
 
-```text
-[ INSERT CLI DEMO GIF HERE ]
-```
+
+![Agent Execution Demo](assets/agent-demo.png)
+
 
 ### Example Report
 
@@ -62,7 +62,7 @@ Final Markdown report
 
 ### Built With
 
-Python • PyTorch • timm • OpenClaw • Computer Vision • Agentic AI • Ollama • OpenClaw
+Python • PyTorch • timm • OpenClaw • Computer Vision • Agentic AI • Ollama
 
 ---
 
@@ -484,7 +484,7 @@ Through this project I strengthened my understanding of:
 ## Clone Repository
 
 ```bash
-git clone https://github.com/your-username/agentic-skin-lesion-classifier.git
+git clone https://github.com/amir-khoshdel-louyeh/agentic-skin-lesion-classifier.git
 
 cd agentic-skin-lesion-classifier
 ```
