@@ -44,9 +44,7 @@ Final Markdown report
 
 ### Example Report
 
-```text
-[ INSERT GENERATED REPORT SCREENSHOT HERE ]
-```
+![Example Report](assets/example-report.png)
 
 ---
 
