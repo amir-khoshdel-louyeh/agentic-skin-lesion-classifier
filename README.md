@@ -205,11 +205,7 @@ openclaw --no-color skills install --force ./openclaw-skills/skin-lesion-mid
 
 ## Example Output
 
-> Replace with a real output screenshot.
-
-```text
-[ INSERT OUTPUT SCREENSHOT HERE ]
-```
+![Structured Output](assets/json-output.png)
 
 ---
 
