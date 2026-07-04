@@ -8,7 +8,8 @@ An agent-driven dermatology screening system that orchestrates multiple CNN mode
 
 ## System Demonstration
 
-> Replace the placeholders below with actual screenshots or GIFs of the app execution and results.
+![Structured Output](assets/system-demonstration.gif)
+
 
 ### System Workflow
 
