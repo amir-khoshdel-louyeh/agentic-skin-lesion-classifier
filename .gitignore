@@ -77,6 +77,15 @@ coverage.xml
 *.swp
 
 skills/
+AGENTS.md
+HEARTBEAT.md
+IDENTITY.md
+openclaw-workspace-state.json
+SOUL.md
+TOOLS.md
+USER.md
+
+
 
 plan.md
 dataset_portions.txt
