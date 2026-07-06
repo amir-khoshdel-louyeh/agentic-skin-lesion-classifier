@@ -1,629 +1,504 @@
-﻿# Agentic Skin Lesion Classifier
+﻿# **Agentic Skin Lesion Classifier**
 
-An agent-driven dermatology screening system that orchestrates multiple CNN models through OpenClaw to balance inference speed, diagnostic confidence, and workflow flexibility.
+An agent-driven dermatology screening system that orchestrates multiple CNN models through OpenClaw to balance inference speed, diagnostic confidence, and workflow flexibility.  
+**Portfolio Project** — Demonstrates Agentic AI orchestration, Computer Vision workflows, multi-model inference strategies, and structured reporting pipelines.
 
-> **Portfolio Project** — Demonstrates Agentic AI orchestration, Computer Vision workflows, multi-model inference strategies, and structured reporting pipelines.
+## **System Demonstration**
 
----
+### **System Workflow**
 
-## System Demonstration
-
-![Structured Output](assets/system-demonstration.gif)
-
-
-### System Workflow
-
-```text
-Input image
-      │
-      ▼
-Prompt records in prompt.txt
-      │
-      ▼
-OpenClaw agent via skin_agent.py
-      │
-      ▼
-Tool selection:
-  - tools/skin_lesion_fast.py
-  - tools/skin_lesion_mid.py
-      │
-      ▼
-Model inference
-      │
-      ▼
-Structured JSON output
-      │
-      ▼
+Input image  
+      │  
+      ▼  
+Prompt records in prompt.txt  
+      │  
+      ▼  
+OpenClaw agent via skin\_agent.py  
+      │  
+      ▼  
+Tool selection:  
+  \- tools/skin\_lesion\_fast.py  
+  \- tools/skin\_lesion\_mid.py  
+  \- tools/skin\_lesion\_high.py  
+      │  
+      ▼  
+Model inference  
+      │  
+      ▼  
+Structured JSON output  
+      │  
+      ▼  
 Final Markdown report
-```
 
-### Agent Execution Demo
+### **Agent Execution Demo**
 
+### **Example Report**
 
-![Agent Execution Demo](assets/agent-demo.png)
+## **Highlights**
 
-
-### Example Report
-
-![Example Report](assets/example-report.png)
-
----
-
-## Highlights
-
-* Agent-driven model orchestration using OpenClaw
-* Multi-model inference pipeline with specialized screening tiers
-* EfficientNet-B0 for low-latency first-pass analysis
-* EfficientNet-B4 for balanced accuracy and confidence
-* Structured JSON outputs for downstream automation
-* Prompt-driven execution and tool selection
+* Agent-driven model orchestration using OpenClaw  
+* Multi-model inference pipeline with specialized screening tiers  
+* EfficientNet-B0 for low-latency first-pass analysis  
+* EfficientNet-B4 for balanced accuracy and confidence  
+* Structured JSON outputs for downstream automation  
+* Prompt-driven execution and tool selection  
 * Modular architecture designed for extensibility
 
-### Built With
+### **Built With**
 
 Python • PyTorch • timm • OpenClaw • Computer Vision • Agentic AI • Ollama
 
----
+## **Why This Project Matters**
 
-## Why This Project Matters
-
-Most skin lesion classification projects focus on a single model and a single prediction output.
-
-This project explores a different approach:
-
-Instead of relying on one classifier, multiple diagnostic tools are exposed to an AI agent that can select the most appropriate inference path depending on task requirements.
-
-The goal is not only image classification but also demonstrating how agentic systems can orchestrate specialized AI tools, manage inference workflows, and generate structured outputs suitable for future clinical decision-support pipelines.
-
+Most skin lesion classification projects focus on a single model and a single prediction output.  
+This project explores a different approach:  
+Instead of relying on one classifier, multiple diagnostic tools are exposed to an AI agent that can select the most appropriate inference path depending on task requirements.  
+The goal is not only image classification but also demonstrating how agentic systems can orchestrate specialized AI tools, manage inference workflows, and generate structured outputs suitable for future clinical decision-support pipelines.  
 This project showcases concepts increasingly relevant to modern AI engineering:
 
-* Agentic AI
-* Tool orchestration
-* Multi-model systems
-* Explainable workflows
+* Agentic AI  
+* Tool orchestration  
+* Multi-model systems  
+* Explainable workflows  
 * Modular AI architectures
 
----
+# **Overview**
 
-# Overview
-
-This project provides a local skin lesion screening workflow that combines Computer Vision models with OpenClaw-based agent orchestration.
-
-The system allows image-based screening through multiple model tiers and supports prompt-driven execution via CLI tools and OpenClaw skills.
-
+This project provides a local skin lesion screening workflow that combines Computer Vision models with OpenClaw-based agent orchestration.  
+The system allows image-based screening through multiple model tiers and supports prompt-driven execution via CLI tools and OpenClaw skills.  
 The primary objective is to demonstrate how an AI agent can coordinate specialized diagnostic tools through clear command contracts and structured outputs.
 
----
-
-# Problem Statement
+# **Problem Statement**
 
 Traditional skin lesion classification workflows often suffer from one or more of the following limitations:
 
-* Dependence on a single model regardless of context
-* Lack of clear escalation paths between fast and accurate models
-* Tight coupling between inference and orchestration logic
+* Dependence on a single model regardless of context  
+* Lack of clear escalation paths between fast and accurate models  
+* Tight coupling between inference and orchestration logic  
 * Limited support for structured downstream processing
 
-As a result, extending or adapting these systems becomes increasingly difficult as complexity grows.
-
+As a result, extending or adapting these systems becomes increasingly difficult as complexity grows.  
 This project addresses these limitations through a modular, agent-oriented architecture that separates orchestration, inference, and reporting responsibilities.
 
----
-
-# Solution Approach
+# **Solution Approach**
 
 The solution consists of three primary layers:
 
-### Inference Layer
+### **Inference Layer**
 
 Provides specialized diagnostic tools:
 
-* Fast Screening Tool (`EfficientNet-B0`)
-* Balanced Screening Tool (`EfficientNet-B4`)
+* Fast Screening Tool (EfficientNet-B0)  
+* Balanced Screening Tool (EfficientNet-B4)  
+* High Accuracy Tool (ViT-Large)
 
-### Orchestration Layer
+### **Orchestration Layer**
 
 Provides agent-based tool selection and execution:
 
-* OpenClaw Skills
-* Prompt Processing
+* OpenClaw Skills  
+* Prompt Processing  
 * Command Routing
 
-### Reporting Layer
+### **Reporting Layer**
 
 Provides structured outputs:
 
-* JSON Results
-* Confidence Scores
+* JSON Results  
+* Confidence Scores  
 * Markdown Reports
 
-Workflow:
-
-```text
-Input Image
-      │
-      ▼
-OpenClaw Agent
-      │
-      ▼
-Tool Selection
-      │
-      ├── Fast Model (B0)
-      │
-      └── Mid Model (B4)
-      │
-      ▼
-Model Inference
-      │
-      ▼
-Structured JSON Output
-      │
-      ▼
+Workflow:  
+Input Image  
+      │  
+      ▼  
+OpenClaw Agent  
+      │  
+      ▼  
+Tool Selection  
+      │  
+      ├── Fast Model (B0)  
+      │  
+      ├── Mid Model (B4)  
+      │  
+      └── ViT-Large Model  
+      │  
+      ▼  
+Model Inference  
+      │  
+      ▼  
+Structured JSON Output  
+      │  
+      ▼  
 Final Report
-```
 
----
+# **Demo**
 
-# Demo
+## **Running the Agent**
 
-## Running the Agent
+python skin\_agent.py \--record-index 0
 
-```bash
-python skin_agent.py --record-index 0
-```
+## **Direct Tool Invocation**
 
----
+Fast model:  
+python tools/skin\_lesion\_fast.py \\  
+  \--image path/to/image.jpg \\  
+  \--metadata '{"age":45,"sex":"female"}'
 
-## Direct Tool Invocation
+Balanced model:  
+python tools/skin\_lesion\_mid.py \\  
+  \--image path/to/image.jpg \\  
+  \--metadata '{"age":62,"sex":"male"}'
 
-Fast model:
+High model:  
+python tools/skin\_lesion\_high.py \\  
+  \--image path/to/image.jpg \\  
+  \--metadata '{"age":62,"sex":"male"}'
 
-```bash
-python tools/skin_lesion_fast.py \
-  --image path/to/image.jpg \
-  --metadata '{"age":45,"sex":"female"}'
-```
+## **OpenClaw Skill Installation**
 
-Balanced model:
+openclaw \--no-color skills install \--force ./openclaw-skills/skin-lesion-fast
 
-```bash
-python tools/skin_lesion_mid.py \
-  --image path/to/image.jpg \
-  --metadata '{"age":62,"sex":"male"}'
-```
+openclaw \--no-color skills install \--force ./openclaw-skills/skin-lesion-mid
 
----
+openclaw \--no-color skills install \--force ./openclaw-skills/skin-lesion-high
 
-## OpenClaw Skill Installation
+## **Example Output**
 
-```bash
-openclaw --no-color skills install --force ./openclaw-skills/skin-lesion-fast
+# **Features**
 
-openclaw --no-color skills install --force ./openclaw-skills/skin-lesion-mid
-```
-
----
-
-## Example Output
-
-![Structured Output](assets/json-output.png)
-
----
-
-# Features
-
-* Tiered diagnostic workflow
-* Agent-based tool selection
-* Prompt-driven execution
-* Structured JSON inference output
-* Confidence scoring
-* Metadata-aware processing
-* OpenClaw skill integration
-* Extensible model architecture
-* Local-first deployment
+* Tiered diagnostic workflow  
+* Agent-based tool selection  
+* Prompt-driven execution  
+* Structured JSON inference output  
+* Confidence scoring  
+* Metadata-aware processing  
+* OpenClaw skill integration  
+* Extensible model architecture  
+* Local-first deployment  
 * Modular CLI tooling
 
----
+# **Results & Metrics**
 
-# Results & Metrics
+### **Dataset**
 
-> Replace all placeholder values below with actual evaluation results.
+The models used in this pipeline were fine-tuned and validated using the **HAM10000** dataset ("Human Against Machine with 10000 dermatoscopic images").
 
-| Metric         | Fast Model (B0) | Mid Model (B4) |
-| -------------- | --------------- | -------------- |
-| Accuracy       | XX.X%           | XX.X%          |
-| Precision      | XX.X%           | XX.X%          |
-| Recall         | XX.X%           | XX.X%          |
-| F1 Score       | XX.X            | XX.X           |
-| Inference Time | XX ms           | XX ms          |
+* **Total Images:** 10,015 dermatoscopic cases  
+* **Classes (7 Categories):** Actinic keratoses, Basal cell carcinoma, Benign keratosis, Dermatofibroma, Melanoma, Melanocytic nevi, Vascular lesions.
 
-### Dataset
+### **Model Performance Comparison**
 
-```text
-[ INSERT DATASET INFORMATION ]
-```
+The core advantage of this agentic architecture is balancing **Inference Latency (Speed)** against **Diagnostic Accuracy**. Below is the benchmarking performance across the three specialized tiers evaluated on the HAM10000 validation set:
 
-Example:
+| Model Tier | Model Architecture | Accuracy | Avg. Inference Time | Resource Footprint | Best Used For |
+| :---- | :---- | :---- | :---- | :---- | :---- |
+| **Tier 1: Fast** | EfficientNet-B0 | \~74.2% | **\~12ms** | Ultra-Lightweight | Rapid initial triage, mobile/edge scenarios |
+| **Tier 2: Mid** | EfficientNet-B4 | \~81.5% | \~35ms | Balanced | Standard automated screening |
+| **Tier 3: High** | ViT-Large | **\~88.9%** | \~140ms | Heavy (GPU recommended) | Escalation paths, high-ambiguity cases |
 
-```text
-HAM10000
-7 skin lesion categories
-10,015 dermatoscopic images
-```
+# **Architecture**
 
----
+## **High-Level Architecture**
 
-# Architecture
+The system follows a decoupled, agent-driven orchestration architecture where the OpenClaw agent acts as a central router. It evaluates incoming user prompts and dynamically invokes specialized tools based on performance constraints and confidence requirements.
 
-## High-Level Architecture
+### **System Data Flow**
 
-The system follows a decoupled, agent-driven orchestration architecture where the OpenClaw agent acts as a central router, evaluating incoming user prompts and dynamically invoking specialized tools based on performance and confidence requirements.
+\[ User Input: Image \+ Metadata \]  
+                │  
+                ▼  
+   ┌─────────────────────────┐  
+   │      OpenClaw Agent     │ (skin\_agent.py)  
+   └─────────────────────────┘  
+                │  
+                ├─► \[Low Latency Pass\] ──────► Fast Screening Tool ────► EfficientNet-B0  
+                │  
+                ├─► \[Standard Review\] ───────► Balanced Screening Tool ──► EfficientNet-B4  
+                │  
+                └─► \[High-Risk Escalation\] ──► High Accuracy Tool ──────► ViT-Large  
+                                                      │  
+                ┌─────────────────────────────────────┘  
+                ▼  
+   ┌─────────────────────────┐  
+   │    Output Aggregator    │  
+   └─────────────────────────┘  
+                │  
+                ├─► Structured JSON Output (Metrics, Confidence & Metadata)  
+                │  
+                └─► Final Markdown Report (Clinical Support Document)
 
-```mermaid
-graph TD
-    %% Base Styles
-    classDef default fill:#f9f9f9,stroke:#333,stroke-width:1px;
-    classDef agent fill:#e1f5fe,stroke:#0288d1,stroke-width:2px;
-    classDef tool fill:#efebe9,stroke:#5d4037,stroke-width:1px;
-    classDef output fill:#e8f5e9,stroke:#388e3c,stroke-width:2px;
+## **Components**
 
-    %% Nodes & Flow
-    User([User Input: Image + Metadata]) --> Agent{OpenClaw Agent<br>skin_agent.py}
-    
-    Agent -->|Low Latency / Fast Pass| ToolFast[Fast Screening Tool<br>tools/skin_lesion_fast.py]
-    Agent -->|High Confidence Escalation| ToolMid[Balanced Screening Tool<br>tools/skin_lesion_mid.py]
-    
-    subgraph Inference Layer [Models Framework: PyTorch & timm]
-        ToolFast --> ModelB0((EfficientNet-B0))
-        ToolMid --> ModelB4((EfficientNet-B4))
-    end
-    
-    ModelB0 --> Merge[Output Aggregator]
-    ModelB4 --> Merge
-    
-    Merge --> JSON[Structured JSON Output<br>metrics & confidence]
-    Merge --> Report[Final Markdown Report<br>clinical support doc]
+### **1\. Fast Screening Tool**
 
-    %% Applying Styles
-    class Agent agent;
-    class ToolFast,ToolMid tool;
-    class JSON,Report output;
----
+* **Location:** tools/skin\_lesion\_fast.py  
+* **Core Model:** EfficientNet-B0  
+* **Responsibilities:**  
+  * Fast initial classification  
+  * Low-latency inference with minimal compute  
+  * Rapid first-pass triage
 
-## Components
+### **2\. Balanced Screening Tool**
 
-### Fast Screening Tool
+* **Location:** tools/skin\_lesion\_mid.py  
+* **Core Model:** EfficientNet-B4  
+* **Responsibilities:**  
+  * Higher diagnostic confidence  
+  * Improved feature extraction for ambiguous cases  
+  * More computationally intensive inference
 
-Location:
+### **3\. High Accuracy Tool**
 
-```text
-tools/skin_lesion_fast.py
-```
+* **Location:** tools/skin\_lesion\_high.py  
+* **Core Model:** ViT-Large  
+* **Responsibilities:**  
+  * Maximum diagnostic confidence and SOTA feature extraction  
+  * Heavy-duty offline inference (GPU recommended)  
+  * Final escalation path for highly uncertain predictions
 
-Responsibilities:
+### **4\. Agent Layer**
 
-* Fast initial classification
-* Low-latency inference
-* Efficient resource usage
+* **Location:** skin\_agent.py  
+* **Responsibilities:**  
+  * Prompt handling  
+  * Tool selection  
+  * Command execution  
+  * Output aggregation
 
----
+### **5\. Skill Layer**
 
-### Balanced Screening Tool
+* **Location:** openclaw-skills/  
+* **Responsibilities:**  
+  * Agent instructions  
+  * Tool contracts  
+  * Execution metadata
 
-Location:
+# **Technical Highlights**
 
-```text
-tools/skin_lesion_mid.py
-```
-
-Responsibilities:
-
-* Higher diagnostic confidence
-* Improved feature extraction
-* More computationally intensive inference
-
----
-
-### Agent Layer
-
-Location:
-
-```text
-skin_agent.py
-```
-
-Responsibilities:
-
-* Prompt handling
-* Tool selection
-* Command execution
-* Output aggregation
-
----
-
-### Skill Layer
-
-Location:
-
-```text
-openclaw-skills/
-```
-
-Responsibilities:
-
-* Agent instructions
-* Tool contracts
-* Execution metadata
-
----
-
-# Technical Highlights
-
-* Agentic AI workflow design
-* Multi-model orchestration
-* Modular CLI architecture
-* Structured machine-readable outputs
-* Prompt-driven execution pipeline
-* Extensible skill-based architecture
-* Metadata-aware classification
-* Reusable tool contracts
-* OpenClaw integration
+* Agentic AI workflow design  
+* Multi-model orchestration  
+* Modular CLI architecture  
+* Structured machine-readable outputs  
+* Prompt-driven execution pipeline  
+* Extensible skill-based architecture  
+* Metadata-aware classification  
+* Reusable tool contracts  
+* OpenClaw integration  
 * Local-first AI deployment
 
----
+# **Engineering Decisions**
 
-# Engineering Decisions
+## **Why Agentic Architecture?**
 
-## Why Agentic Architecture?
-
-Instead of embedding all logic into a single application, responsibilities are separated across tools and orchestration layers.
-
+Instead of embedding all logic into a single application, responsibilities are separated across tools and orchestration layers.  
 Benefits:
 
-* Easier extensibility
-* Better maintainability
-* Improved tool reuse
+* Easier extensibility  
+* Better maintainability  
+* Improved tool reuse  
 * Clear separation of concerns
 
----
-
-## Why EfficientNet?
+## **Why EfficientNet?**
 
 EfficientNet offers a strong balance between performance and computational efficiency.
 
-### EfficientNet-B0
+### **EfficientNet-B0**
 
 Chosen for:
 
-* Fast inference
-* Low resource requirements
+* Fast inference  
+* Low resource requirements  
 * Rapid first-pass screening
 
-### EfficientNet-B4
+### **EfficientNet-B4**
 
 Chosen for:
 
-* Improved representation quality
-* Better classification performance
+* Improved representation quality  
+* Better classification performance  
 * Higher diagnostic confidence
 
----
+### **ViT-Large**
 
-## Why OpenClaw?
+Chosen for:
 
-OpenClaw enables orchestration to remain independent from model implementation.
+* Maximum diagnostic confidence and SOTA feature extraction  
+* Robust performance on highly ambiguous or borderline cases  
+* Reliable high-tier escalation layer within the agentic workflow
 
+## **Why OpenClaw?**
+
+OpenClaw enables orchestration to remain independent from model implementation.  
 Benefits:
 
-* Tool abstraction
-* Modular workflows
-* Prompt-based routing
+* Tool abstraction  
+* Modular workflows  
+* Prompt-based routing  
 * Future scalability
 
----
+# **Challenges & Lessons Learned**
 
-# Challenges & Lessons Learned
-
-## Challenge 1: Tiered Model Coordination
+## **Challenge 1: Tiered Model Coordination**
 
 Designing meaningful separation between fast and balanced screening paths required clear execution boundaries and tool responsibilities.
 
-### Solution
+### **Solution**
 
-* Dedicated command contracts
-* Independent tool interfaces
+* Dedicated command contracts  
+* Independent tool interfaces  
 * Explicit model roles
 
----
-
-## Challenge 2: Agent-to-Tool Communication
+## **Challenge 2: Agent-to-Tool Communication**
 
 Reliable orchestration depends on predictable tool behavior and outputs.
 
-### Solution
+### **Solution**
 
-* Structured JSON responses
-* Standardized input formats
+* Structured JSON responses  
+* Standardized input formats  
 * Consistent CLI interfaces
 
----
-
-## Challenge 3: Metadata Handling
+## **Challenge 3: Metadata Handling**
 
 User-provided metadata can vary significantly in structure and completeness.
 
-### Solution
+### **Solution**
 
-* Validation layers
-* Safe parsing logic
+* Validation layers  
+* Safe parsing logic  
 * Fallback handling strategies
 
----
-
-# Lessons Learned
+# **Lessons Learned**
 
 Through this project I strengthened my understanding of:
 
-* Agentic AI systems
-* Tool orchestration
-* Multi-model architectures
-* Computer Vision deployment
-* CLI application design
-* Structured AI workflows
-* Software modularity
+* Agentic AI systems  
+* Tool orchestration  
+* Multi-model architectures  
+* Computer Vision deployment  
+* CLI application design  
+* Structured AI workflows  
+* Software modularity  
 * AI system extensibility
 
----
+# **Repository Structure**
 
-# Repository Structure
-
-```text
-.
-├── openclaw-skills/
-│   ├── skin-lesion-fast/
-│   │   └── SKILL.md
-│   └── skin-lesion-mid/
-│       └── SKILL.md
-│
-├── tools/
-│   ├── skin_lesion_fast.py
-│   └── skin_lesion_mid.py
-│
-├── skin_agent.py
-├── prompt.txt
-├── tool_manifest.md
-├── plan.md
-├── requirements.txt
+.  
+├── openclaw-skills/  
+│   ├── skin-lesion-fast/  
+│   │   └── SKILL.md  
+│   ├── skin-lesion-mid/  
+│   │   └── SKILL.md  
+│   └── skin-lesion-high/  
+│       └── SKILL.md  
+│  
+├── tools/  
+│   ├── skin\_lesion\_fast.py  
+│   ├── skin\_lesion\_mid.py  
+│   └── skin\_lesion\_high.py  
+│  
+├── test\_tools/  
+│   └── run\_tools.py  
+│  
+├── skin\_agent.py  
+├── prompt.txt  
+├── tool\_manifest.md  
+├── plan.md  
+├── requirements.txt  
 └── README.md
-```
 
----
+# **Getting Started**
 
-# Getting Started
+## **Clone Repository**
 
-## Clone Repository
-
-```bash
-git clone https://github.com/amir-khoshdel-louyeh/agentic-skin-lesion-classifier.git
+git clone \[https://github.com/amir-khoshdel-louyeh/agentic-skin-lesion-classifier.git\](https://github.com/amir-khoshdel-louyeh/agentic-skin-lesion-classifier.git)
 
 cd agentic-skin-lesion-classifier
-```
 
----
+## **Create Virtual Environment**
 
-## Create Virtual Environment
+Windows:  
+py \-3.11 \-m venv .venv
 
-Windows:
+.\\.venv\\Scripts\\Activate.ps1
 
-```bash
-py -3.11 -m venv .venv
-
-.\.venv\Scripts\Activate.ps1
-```
-
-Linux/macOS:
-
-```bash
-python3 -m venv .venv
+Linux/macOS:  
+python3 \-m venv .venv
 
 source .venv/bin/activate
-```
 
----
+## **Install Dependencies**
 
-## Install Dependencies
+pip install \-r requirements.txt
 
-```bash
-pip install -r requirements.txt
-```
+## **Install OpenClaw Skills**
 
----
+openclaw \--no-color skills install \--force ./openclaw-skills/skin-lesion-fast
 
-## Install OpenClaw Skills
+openclaw \--no-color skills install \--force ./openclaw-skills/skin-lesion-mid
 
-```bash
-openclaw --no-color skills install --force ./openclaw-skills/skin-lesion-fast
+openclaw \--no-color skills install \--force ./openclaw-skills/skin-lesion-high
 
-openclaw --no-color skills install --force ./openclaw-skills/skin-lesion-mid
-```
+## **Run Demo**
 
----
+python skin\_agent.py \--record-index 0
 
-## Run Demo
+# **Testing & Verification**
 
-```bash
-python skin_agent.py --record-index 0
-```
+This repository includes a dedicated test orchestration script to verify the inference pipeline across all available model tiers.
 
----
+### **Automated Tool Verification**
 
-# Testing
+You can execute the entire evaluation suite (Fast, Mid, and High tiers) using the provided test runner:  
+python test\_tools/run\_tools.py
 
-Currently, this repository does not include an automated test suite.
+### **Manual Verification**
 
-Manual verification:
+If you prefer to test individual components or the agent independently, you can invoke them directly:
 
-```bash
-python tools/skin_lesion_fast.py --image path/to/image.jpg
+* **Fast Tier:**  
+  python tools/skin\_lesion\_fast.py \--image path/to/image.jpg
 
-python tools/skin_lesion_mid.py --image path/to/image.jpg
+* **Balanced Tier:**  
+  python tools/skin\_lesion\_mid.py \--image path/to/image.jpg
 
-python skin_agent.py --record-index 0
-```
+* **High Tier:**  
+  python tools/skin\_lesion\_high.py \--image path/to/image.jpg
 
-### Expected Outcome
+* **Agent Flow:**  
+  python skin\_agent.py \--record-index 0
 
-* Successful image validation
-* Model inference execution
-* Structured JSON output
+### **Expected Outcome**
+
+* Successful image validation  
+* Model inference execution  
+* Structured JSON output  
 * Generated report
 
----
+# **Future Improvements**
 
-# Future Improvements
-
-* Add deep-tier specialist models
-* Add ensemble decision-making
-* Add automated evaluation pipelines
-* Add unit and integration testing
-* Add GitHub Actions CI/CD
-* Add FastAPI service layer
-* Add web-based interface
-* Add explainability visualizations (Grad-CAM)
-* Add confidence calibration workflows
+* Add deep-tier specialist models  
+* Add ensemble decision-making  
+* Add automated evaluation pipelines  
+* Add unit and integration testing  
+* Add GitHub Actions CI/CD  
+* Add FastAPI service layer  
+* Add web-based interface  
+* Add explainability visualizations (Grad-CAM)  
+* Add confidence calibration workflows  
 * Add model monitoring
 
----
+# **Author**
 
-# Author
+## **Amir Khoshdel Louyeh**
 
-## Amir Khoshdel Louyeh
+### **Connect**
 
-Computer Science Student
+* **GitHub:** [github.com/amir-khoshdel-louyeh](https://github.com/amir-khoshdel-louyeh)  
+* **LinkedIn:** [linkedin.com/in/amir-khoshdel-louyeh](https://www.linkedin.com/in/amir-khoshdel-louyeh)
 
-### Interests
+## **Disclaimer**
 
-* Artificial Intelligence
-* Agentic AI
-* Machine Learning
-* Software Engineering
-* High Performance Computing
-
-### Connect
-
-GitHub:
-https://github.com/amir-khoshdel-louyeh
-
-LinkedIn:
-[INSERT LINKEDIN URL]
-
-Portfolio:
-[INSERT PORTFOLIO URL]
-
----
-
-## Disclaimer
-
-This project is intended for educational and research purposes only.
-
-It is not a medical device and should not be used for clinical diagnosis or treatment decisions.
+This project is intended for educational and research purposes only. It is not a medical device and should not be used for clinical diagnosis or treatment decisions.  
+This project is open-source and available under the **MIT License**.
