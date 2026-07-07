@@ -11,7 +11,7 @@ This skill runs the local high-tier skin lesion classification model.
 ## Command
 
 ```bash
-python C:/Amir/GitHub/agentic-skin-lesion-classifier/openclaw-skills/skin-lesion-high/tools/skin_lesion_high.py --image <path_to_image> [--metadata '<json_string>']
+python tools/skin_lesion_high.py --image <path_to_image> [--metadata '<json_string>']
 ```
 
 ## Behavior

@@ -5,17 +5,17 @@ You have access to the following local CLI tools for skin lesion analysis. You m
 ## Available Core Tools
 
 ### 1. Tier 1: Fast Screening Classifier
-* **Command:** `python C:/Amir/GitHub/agentic-skin-lesion-classifier/tools/skin_lesion_fast.py --image <path> [--metadata <json>]`
+* **Command:** `python tools/skin_lesion_fast.py --image <path> [--metadata <json>]`
 * **Model:** ConvNeXt-Small (Optimized for speed)
 * **Purpose:** Initial first-pass screening.
 
 ### 2. Tier 2: Mid Verification Classifier
-* **Command:** `python C:/Amir/GitHub/agentic-skin-lesion-classifier/tools/skin_lesion_mid.py --image <path> [--metadata <json>]`
+* **Command:** `python tools/skin_lesion_mid.py --image <path> [--metadata <json>]`
 * **Model:** Swin-Tiny (Balanced accuracy)
 * **Purpose:** Reliable secondary verification for ambiguous cases.
 
 ### 3. Tier 3: High Precision Classifier
-* **Command:** `python C:/Amir/GitHub/agentic-skin-lesion-classifier/tools/skin_lesion_high.py --image <path> [--metadata <json>]`
+* **Command:** `python tools/skin_lesion_high.py --image <path> [--metadata <json>]`
 * **Model:** ViT-Large (SOTA accuracy)
 * **Purpose:** Critical analysis required only when lower tiers return sub-threshold confidence.
 
