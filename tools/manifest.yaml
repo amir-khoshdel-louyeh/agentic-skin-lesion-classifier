@@ -29,3 +29,35 @@ tools:
     calibrated: false
     vram_budget_gb: 2.0
     tier: tier3_high
+
+  - name: quality-gate
+    command: tools/quality_gate.py
+    category: utility
+    requires: [image]
+    produces: [quality_assessment]
+    modality: image
+    calibrated: false
+    vram_budget_gb: 0.0
+    tier: utility
+
+  - name: drdiag-vlm
+    command: tools/drdiag_vlm.py
+    category: diagnostic
+    requires: [image]
+    produces: [screening_verdict, explanation]
+    modality: image+text
+    calibrated: false
+    vram_budget_gb: 5.0
+    tier: tier3_high
+    status: wrapper_pending
+
+  - name: multimodal-fusion
+    command: tools/multimodal_fusion.py
+    category: diagnostic
+    requires: [image, metadata]
+    produces: [screening_verdict]
+    modality: image+metadata
+    calibrated: false
+    vram_budget_gb: 1.0
+    tier: tier2_mid
+    status: wrapper_pending

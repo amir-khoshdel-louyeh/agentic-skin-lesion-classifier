@@ -14,9 +14,20 @@ fetched, WHERE from, and its integrity hash. No training performed.
 - Caveat: 28×28 input, claimed 0.99 accuracy looks optimistic —
   must be measured on local 24 images before role assignment.
 
-## Candidates [PENDING download approval]
-- abaryan/DrDiag_qwen2vl_Ham10000 — 2B VLM, ~4.4 GB safetensors.
-  https://huggingface.co/abaryan/DrDiag_qwen2vl_Ham10000
-- cesaraha/ham10000-multimodal-skin-lesion — needs author repo code
-  (architecture not self-contained), metadata required at inference.
-  https://huggingface.co/cesaraha/ham10000-multimodal-skin-lesion
+## models/drdiag-vlm/ — VLM high tier [DOWNLOADED, VERIFIED]
+- Source: https://huggingface.co/abaryan/DrDiag_qwen2vl_Ham10000
+- Files: model.safetensors (4,418,050,848 bytes, exact server size),
+  config/tokenizer/preprocessor JSONs.
+- Integrity: safetensors header parses, 729 tensors (Qwen2-VL arch).
+- VRAM note: ~4–5 GB resident — VLM phase requires FULL LLM unload
+  (exceeds the 2 GB standard tool budget; sequential schedule only).
+- Status: wrapper pending (transformers Qwen2-VL path).
+
+## models/multimodal/ — multimodal mid tier [DOWNLOADED, VERIFIED]
+- Source: https://huggingface.co/cesaraha/ham10000-multimodal-skin-lesion
+  (Apache-2.0) + arch notebook from
+  github.com/cesaraha/ham10000-multimodal-skin-lesion
+- Files: best.pt (6,406,587 bytes, 48 tensors + training meta),
+  config.json (CrossAttentionFusionModel, meta_dim 35), arch notebook.
+- Reported: test AUROC macro 0.9385, accuracy 0.7063.
+- Status: wrapper pending (architecture extraction from notebook).

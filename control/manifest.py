@@ -20,8 +20,9 @@ class ToolEntry(BaseModel, frozen=True):
     produces: list[str] = Field(default_factory=list)
     modality: str = Field(min_length=1)
     calibrated: bool = False
-    vram_budget_gb: float = Field(default=2.0, gt=0)
+    vram_budget_gb: float = Field(default=2.0, ge=0)
     tier: str = ""
+    status: str = "ready"
 
 
 class Manifest(BaseModel, frozen=True):
