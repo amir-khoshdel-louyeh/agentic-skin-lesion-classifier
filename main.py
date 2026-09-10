@@ -104,15 +104,26 @@ def main() -> None:
         from orchestrator import run_round
 
         if args.no_interactive and args.record_index is None:
+            from control.decide import append_audit
+
             records = load_prompt_records(str(prompt_path))
             for index in range(len(records)):
-                out = run_round(
-                    index,
-                    prompt_file=str(prompt_path),
-                    tool_helper_file=str(tool_helper_path),
-                    agent_id=args.agent_id,
-                )
-                print(f"Round {index} report: {out}")
+                try:
+                    out = run_round(
+                        index,
+                        prompt_file=str(prompt_path),
+                        tool_helper_file=str(tool_helper_path),
+                        agent_id=args.agent_id,
+                    )
+                    print(f"Round {index} report: {out}")
+                except Exception as exc:
+                    # One bad record must not kill the sweep.
+                    append_audit({
+                        "event": "round_failed",
+                        "record_index": index,
+                        "error": str(exc)[:500],
+                    })
+                    print(f"Round {index} FAILED ({exc}); continuing.")
             return
         out = run_round(
             args.record_index or 0,
