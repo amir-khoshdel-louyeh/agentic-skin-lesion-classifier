@@ -81,6 +81,15 @@ def main() -> None:
     if args.chat:
         if args.record is None:
             raise SystemExit("--chat requires --record <index>.")
+        from control.chat import build_debate_prompt
+
+        try:
+            print(build_debate_prompt(args.record))
+        except FileNotFoundError as exc:
+            raise SystemExit(
+                f"{exc}\nHint: run the round first "
+                f"(--record-index {args.record})."
+            ) from exc
         records = load_prompt_records(prompt_path)
         if args.record < 0 or args.record >= len(records):
             raise SystemExit("record index out of range.")
