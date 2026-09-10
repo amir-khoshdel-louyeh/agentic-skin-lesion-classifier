@@ -57,7 +57,7 @@ tools:
     requires: [image, metadata]
     produces: [screening_verdict]
     modality: image+metadata
-    calibrated: false
+    calibrated: true
     vram_budget_gb: 1.0
     tier: tier2_mid
-    status: wrapper_pending
+    status: ready
