@@ -1,0 +1,5 @@
+{"event": "round", "record_index": 0, "image": "dataset/ISIC2019/ISIC_0000002.jpg", "decision": "suspicious", "reason": "borderline verdict (Melanoma, 0.68)", "report": "round_0_20260925_112555.md", "ts": "2026-09-25T11:25:55.637320+00:00"}
+{"event": "round", "record_index": 0, "image": "dataset/ISIC2019/ISIC_0000002.jpg", "decision": "inconclusive", "reason": "no receipted verdicts", "report": "round_0_20260925_112934.md", "ts": "2026-09-25T11:29:34.116677+00:00"}
+{"event": "round", "record_index": 0, "image": "dataset/ISIC2019/ISIC_0000002.jpg", "decision": "inconclusive", "reason": "no receipted verdicts", "report": "round_0_20260925_113045.md", "ts": "2026-09-25T11:30:45.599312+00:00"}
+{"event": "round", "record_index": 0, "image": "dataset/ISIC2019/ISIC_0000002.jpg", "decision": "inconclusive", "reason": "no receipted verdicts", "report": "round_0_20260925_113309.md", "ts": "2026-09-25T11:33:09.386343+00:00"}
+{"event": "round", "record_index": 0, "image": "dataset/ISIC2019/ISIC_0000002.jpg", "decision": "suspicious", "reason": "borderline verdict (Melanoma, 0.5074)", "report": "round_0_20260925_113547.md", "ts": "2026-09-25T11:35:47.011167+00:00"}

@@ -21,6 +21,8 @@ Schema: {"ran": bool, "command": string, "exit_code": int|null, \
 "uncertainty_flags": subset of ["borderline","no_evidence",\
 "tool_failed","disagreement"]}.
 If you could not run a tool, set ran=false and explain in reasoning.
+Copy disease_name and confidence_score EXACTLY as the tool printed them;
+never round, adjust, or reinterpret them.
 """ % (list(HAM10000_CLASSES),)
 
 _JSON_OBJECT_RE = re.compile(r"\{.*\}", re.DOTALL)

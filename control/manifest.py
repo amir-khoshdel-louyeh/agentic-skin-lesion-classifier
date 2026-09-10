@@ -52,3 +52,17 @@ def load_manifest(path: Path) -> Manifest:
         return Manifest(**payload)
     except ValidationError as exc:
         raise ValueError(f"Invalid manifest {path}: {exc}") from exc
+
+
+def render_for_agents(manifest: Manifest) -> str:
+    """Prompt-safe tool listing: ready tools only, no legacy docs."""
+    lines = ["Available tools (use EXACTLY these commands):", ""]
+    for tool in manifest.tools:
+        if tool.status != "ready":
+            continue
+        lines.append(
+            f"- {tool.name} [{tool.tier}]: "
+            f"`python {tool.command} --image <path> [--metadata <json>]` "
+            f"(needs: {', '.join(tool.requires) or 'nothing'})"
+        )
+    return "\n".join(lines)

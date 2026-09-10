@@ -2,6 +2,7 @@ version: 2
 tools:
   - name: skin-lesion-fast
     command: tools/skin_lesion_fast.py
+    status: no_weights
     category: diagnostic
     requires: [image]
     produces: [screening_verdict]
@@ -12,6 +13,7 @@ tools:
 
   - name: skin-lesion-mid
     command: tools/skin_lesion_mid.py
+    status: no_weights
     category: diagnostic
     requires: [image]
     produces: [screening_verdict]
@@ -22,6 +24,7 @@ tools:
 
   - name: skin-lesion-high
     command: tools/skin_lesion_high.py
+    status: no_weights
     category: diagnostic
     requires: [image]
     produces: [screening_verdict]
@@ -29,6 +32,17 @@ tools:
     calibrated: false
     vram_budget_gb: 2.0
     tier: tier3_high
+
+  - name: ham10000-cnn
+    command: tools/ham10000_cnn.py
+    category: diagnostic
+    requires: [image]
+    produces: [screening_verdict]
+    modality: image
+    calibrated: false
+    vram_budget_gb: 1.0
+    tier: tier1_fast
+    status: ready
 
   - name: quality-gate
     command: tools/quality_gate.py

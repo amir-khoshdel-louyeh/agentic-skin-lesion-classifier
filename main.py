@@ -59,7 +59,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--tool-helper-file",
-        default=str(ROOT_DIR / "tool_manifest.md"),
+        default=str(ROOT_DIR / "tools" / "manifest.yaml"),
         help="Tool manifest path (relative or absolute).",
     )
     return parser
@@ -92,12 +92,26 @@ def main() -> None:
         return
 
     if args.no_interactive or args.record_index is not None:
-        send_records_to_openclaw(
-            prompt_path,
-            record_index=args.record_index,
+        from orchestrator import run_round
+
+        if args.no_interactive and args.record_index is None:
+            records = load_prompt_records(str(prompt_path))
+            for index in range(len(records)):
+                out = run_round(
+                    index,
+                    prompt_file=str(prompt_path),
+                    tool_helper_file=str(tool_helper_path),
+                    agent_id=args.agent_id,
+                )
+                print(f"Round {index} report: {out}")
+            return
+        out = run_round(
+            args.record_index or 0,
+            prompt_file=str(prompt_path),
+            tool_helper_file=str(tool_helper_path),
             agent_id=args.agent_id,
-            tool_helper_file=tool_helper_path,
         )
+        print(f"Round report: {out}")
         return
 
     # Default: interactive chat on the first record (matches skin_agent.py).

@@ -33,8 +33,10 @@ def build_agent_prompt(
 ) -> str:
     role_prompt = load_role(role)
     metadata = json.dumps(record.get("metadata", {}), ensure_ascii=False)
+    extra = record.get("role_extra", "")
+    extra_section = f"\nRole assignment: {extra}\n" if extra else ""
     return (
-        f"{role_prompt}\n\nCase image: {record.get('image_path')}\n"
+        f"{role_prompt}\n{extra_section}\nCase image: {record.get('image_path')}\n"
         f"Case metadata: {metadata}\n"
         f"Available tools:\n{manifest_text}\n\n"
         "Execute the suitable tool command(s) for this case, then "
