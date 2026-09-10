@@ -87,6 +87,9 @@ USER.md
 
 
 
+# Generated per-round reports (runtime artifacts, not source)
+reports/round_*.md
+
 plan.md
 dataset_portions.txt
 openclaw.jason

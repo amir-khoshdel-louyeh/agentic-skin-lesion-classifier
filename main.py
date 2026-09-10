@@ -106,7 +106,7 @@ def main() -> None:
         if args.no_interactive and args.record_index is None:
             from control.decide import append_audit
 
-            records = load_prompt_records(str(prompt_path))
+            records = load_prompt_records(prompt_path)
             for index in range(len(records)):
                 try:
                     out = run_round(
