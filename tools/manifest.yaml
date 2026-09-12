@@ -86,3 +86,14 @@ tools:
     vram_budget_gb: 0.0
     tier: support
     status: ready
+
+  - name: preprocess
+    command: tools/preprocess.py
+    category: preprocessing
+    requires: [image]
+    produces: [cleaned_image]
+    modality: image
+    calibrated: false
+    vram_budget_gb: 0.0
+    tier: preprocessing
+    status: ready
