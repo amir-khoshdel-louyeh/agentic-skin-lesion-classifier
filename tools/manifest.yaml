@@ -141,3 +141,14 @@ tools:
     vram_budget_gb: 6.0
     tier: tier3_high
     status: rejected_benchmark
+
+  - name: ensemble-high
+    command: tools/ensemble_high.py
+    category: diagnostic
+    requires: [image, metadata]
+    produces: [screening_verdict]
+    modality: image+metadata
+    calibrated: false
+    vram_budget_gb: 2.0
+    tier: tier3_high
+    status: ready

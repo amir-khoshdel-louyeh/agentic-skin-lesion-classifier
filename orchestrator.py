@@ -26,6 +26,9 @@ AGENT_ROLES = (
     "Report its exact JSON output faithfully.",
     "Fusion role: use ONLY tools/multimodal_fusion.py with the case image "
     "and the case metadata JSON. Report its exact JSON output faithfully.",
+    "High-tier role: use ONLY tools/ensemble_high.py with the case image "
+    "and the case metadata JSON. Report its exact JSON output faithfully, "
+    "including entropy and uncertainty_flags.",
 )
 
 
