@@ -130,3 +130,14 @@ tools:
     vram_budget_gb: 1.0
     tier: tier2_mid
     status: rejected_benchmark
+
+  - name: vlm-ollama
+    command: tools/vlm_ollama.py
+    category: diagnostic
+    requires: [image]
+    produces: [screening_verdict]
+    modality: image+text
+    calibrated: false
+    vram_budget_gb: 6.0
+    tier: tier3_high
+    status: rejected_benchmark
