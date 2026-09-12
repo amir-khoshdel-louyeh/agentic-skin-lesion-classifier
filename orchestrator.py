@@ -157,4 +157,21 @@ def run_round(
         "reason": decision["reason"],
         "report": out.name,
     })
+    ping(f"Round {record_index} complete: {decision['decision']} ({out.name})",
+         level="info")
     return out
+
+
+def ping(message: str, level: str = "info") -> None:
+    """Best-effort desktop toast (Phase 6 notify hook). A missing desktop
+    or failing hook must never break a round: all errors swallowed."""
+    import subprocess
+
+    try:
+        subprocess.run(
+            [sys.executable, str(ROOT_DIR / "tools" / "notify.py"),
+             "--message", message, "--level", level],
+            capture_output=True, timeout=30, cwd=str(ROOT_DIR),
+        )
+    except Exception:  # noqa: BLE001 - notification is informational only
+        pass

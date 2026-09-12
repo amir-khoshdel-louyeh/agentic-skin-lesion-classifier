@@ -124,6 +124,10 @@ def main() -> None:
                         "error": str(exc)[:500],
                     })
                     print(f"Round {index} FAILED ({exc}); continuing.")
+                    from orchestrator import ping
+
+                    ping(f"Round {index} FAILED: {str(exc)[:200]}",
+                         level="error")
             return
         out = run_round(
             args.record_index or 0,

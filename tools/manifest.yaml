@@ -108,3 +108,14 @@ tools:
     vram_budget_gb: 0.0
     tier: reporting
     status: ready
+
+  - name: notify
+    command: tools/notify.py
+    category: notification
+    requires: [message]
+    produces: [notification_receipt]
+    modality: text
+    calibrated: false
+    vram_budget_gb: 0.0
+    tier: notification
+    status: ready
