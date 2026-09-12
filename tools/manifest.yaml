@@ -97,3 +97,14 @@ tools:
     vram_budget_gb: 0.0
     tier: preprocessing
     status: ready
+
+  - name: report-pdf
+    command: tools/report_pdf.py
+    category: reporting
+    requires: [report]
+    produces: [pdf_report]
+    modality: text
+    calibrated: false
+    vram_budget_gb: 0.0
+    tier: reporting
+    status: ready

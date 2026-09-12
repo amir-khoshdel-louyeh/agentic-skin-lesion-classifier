@@ -54,15 +54,26 @@ def load_manifest(path: Path) -> Manifest:
         raise ValueError(f"Invalid manifest {path}: {exc}") from exc
 
 
+USAGE_BY_CATEGORY = {
+    # Non-image categories need their real CLI shape; the generic
+    # `--image` form would mislead agents (Phase 6 reporting tools).
+    "preprocessing": "--image <path> --output <path> [--steps hair,denoise]",
+    "reporting": "--input <markdown> --output <pdf>",
+    "notification": "--message <text> [--level info|warning|error]",
+}
+
+
 def render_for_agents(manifest: Manifest) -> str:
     """Prompt-safe tool listing: ready tools only, no legacy docs."""
     lines = ["Available tools (use EXACTLY these commands):", ""]
     for tool in manifest.tools:
         if tool.status != "ready":
             continue
+        usage = USAGE_BY_CATEGORY.get(
+            tool.category, "--image <path> [--metadata <json>]")
         lines.append(
             f"- {tool.name} [{tool.tier}]: "
-            f"`python {tool.command} --image <path> [--metadata <json>]` "
+            f"`python {tool.command} {usage}` "
             f"(needs: {', '.join(tool.requires) or 'nothing'})"
         )
     return "\n".join(lines)
