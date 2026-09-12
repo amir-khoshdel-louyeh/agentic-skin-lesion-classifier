@@ -119,3 +119,14 @@ tools:
     vram_budget_gb: 0.0
     tier: notification
     status: ready
+
+  - name: dermai-b0
+    command: tools/dermai_b0.py
+    category: diagnostic
+    requires: [image]
+    produces: [screening_verdict]
+    modality: image
+    calibrated: false
+    vram_budget_gb: 1.0
+    tier: tier2_mid
+    status: rejected_benchmark

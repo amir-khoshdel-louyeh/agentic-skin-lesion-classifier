@@ -14,6 +14,19 @@ fetched, WHERE from, and its integrity hash. No training performed.
 - Caveat: 28×28 input, claimed 0.99 accuracy looks optimistic —
   must be measured on local 24 images before role assignment.
 
+## models/dermai-b0/ — DermAI EfficientNet-B0 candidate [DOWNLOADED, BENCHMARKED, REJECTED]
+- Source: https://huggingface.co/sgonzalez2000/dermai-efficientnet-b0
+- License: Apache-2.0.
+- Files: model.safetensors (16,280,748 bytes), config.json,
+  preprocessor_config.json (EfficientNet 224px, mean 0.485/0.456/0.406).
+- sha256:
+  - model.safetensors:     bfc6892df8c2b40f7bd0d012f2104a734782d2a75fbd8ac73608b47056cd4382
+  - config.json:           84d9704a779d92e3ed7a955d5fb72fd522068f5381c911d38a6d03c0f06ae2c1
+  - preprocessor_config.json: f678895d3b0b6d95f32b0ab9d683c127c69b5f45939f82932cb90eb58bffa51e
+- Label map (ISIC codes): 0 akiec, 1 bcc, 2 bkl, 3 df, 4 mel, 5 nv, 6 vasc
+- Status: benchmarked Phase 7 (reports/phase7_benchmark_dermai.md),
+  accuracy 0.7143 dominated by triage CNN — no agent role.
+
 ## models/drdiag-vlm/ — VLM high tier [DOWNLOADED, VERIFIED]
 - Source: https://huggingface.co/abaryan/DrDiag_qwen2vl_Ham10000
 - Files: model.safetensors (4,418,050,848 bytes, exact server size),
