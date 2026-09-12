@@ -75,3 +75,14 @@ tools:
     vram_budget_gb: 1.0
     tier: tier2_mid
     status: ready
+
+  - name: abcde-analyzer
+    command: tools/abcde_analyzer.py
+    category: analysis
+    requires: [image]
+    produces: [abcde_assessment]
+    modality: image
+    calibrated: false
+    vram_budget_gb: 0.0
+    tier: support
+    status: ready
