@@ -87,8 +87,8 @@ USER.md
 
 
 
-# Generated per-round reports (runtime artifacts, not source)
-reports/round_*.md
+# Generated reports (runtime artifacts + local benchmarks, not source)
+reports/
 
 plan.md
 dataset_portions.txt
