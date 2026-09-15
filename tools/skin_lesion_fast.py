@@ -1,103 +1,112 @@
+"""Fast-tier classifier: HAM10000 SkinCNN triage (models/derm-cnn).
+
+Uses the vendored lightweight CNN (model.pth + model.py + labels.json,
+28x28 input) — no download needed. Uniform JSON contract.
+VRAM discipline: load -> infer -> release in finally.
+"""
+
 import argparse
+import importlib.util
 import json
 import os
 import sys
+from pathlib import Path
+
 from PIL import Image, ImageOps
-import torch
-import torch.nn as nn
-from transformers import AutoModelForImageClassification, AutoImageProcessor
 
-# لایبل‌های استاندارد ۷ کلاسی
-CLASSES = [
-    "Actinic keratoses", "Basal cell carcinoma", "Benign keratosis", 
-    "Dermatofibroma", "Melanoma", "Melanocytic nevi", "Vascular lesions"
-]
+BASE_DIR = Path(__file__).resolve().parent.parent
+WEIGHTS_DIR = BASE_DIR / "models" / "derm-cnn"
 
-SUPPORTED_CUDA_SM = {(5,0), (6,0), (6,1), (7,0), (7,5), (8,0), (8,6), (9,0), (12,0)}
-DEVICE = torch.device("cpu")
+ISIC_TO_CLASS = {
+    "akiec": "Actinic keratoses",
+    "bcc": "Basal cell carcinoma",
+    "bkl": "Benign keratosis",
+    "df": "Dermatofibroma",
+    "nv": "Melanocytic nevi",
+    "vasc": "Vascular lesions",
+    "mel": "Melanoma",
+}
 
-def select_cuda_device() -> torch.device:
-    if not torch.cuda.is_available(): return torch.device("cpu")
-    try:
-        capability = torch.cuda.get_device_capability()
-        if capability in SUPPORTED_CUDA_SM: return torch.device("cuda")
-    except Exception: pass
-    return torch.device("cpu")
+VRAM_BUDGET_BYTES = 2 * 1024**3
 
-def get_fast_tier_model(device):
-    print("⏳ Loading Offline Fast-Tier ConvNeXt with manual processor...", file=sys.stderr)
-    
-    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    local_model_path = os.path.join(BASE_DIR, "models", "offline_fast")
-    
-    # لود مدل
-    model = AutoModelForImageClassification.from_pretrained(local_model_path, local_files_only=True)
-    
-    # لود دستی پردازشگر (استفاده از تنظیمات پیش‌فرض ConvNeXt)
-    # مدل‌های ConvNeXt معمولاً از سایز 224 استفاده می‌کنند
-    from transformers import ConvNextImageProcessor
-    processor = ConvNextImageProcessor.from_pretrained(local_model_path, local_files_only=True)
-    
-    model.to(device)
-    model.eval()
-    return model, processor
 
-def main():
-    parser = argparse.ArgumentParser(description="Fast-Tier ConvNeXt Offline Structural Classifier.")
+def fail(message: str) -> int:
+    print(json.dumps({"status": "error", "message": message}))
+    return 1
+
+
+def load_arch():
+    spec = importlib.util.spec_from_file_location(
+        "derm_cnn_model", WEIGHTS_DIR / "model.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Fast-Tier SkinCNN triage classifier.")
     parser.add_argument("--image", dest="image_path", required=True)
     parser.add_argument("--metadata", dest="metadata", required=False)
     args = parser.parse_args()
 
-    global DEVICE
-    DEVICE = select_cuda_device()
-
     if not os.path.exists(args.image_path):
         print(json.dumps({"status": "error", "message": f"Image not found: {args.image_path}"}))
-        sys.exit(1)
+        return 1
+    if not (WEIGHTS_DIR / "model.pth").exists():
+        return fail(f"Fast-tier weights missing at: {WEIGHTS_DIR / 'model.pth'}")
 
-    # پردازش ایمن متادیتا
-    metadata_json = {}
+    metadata = {}
     if args.metadata:
         try:
-            # چون حالا خروجی ایجنت دقیق است، مستقیم آن را پارس می‌کنیم
-            metadata_json = json.loads(args.metadata)
-        except json.JSONDecodeError as e:
-            # اگر فرمت اشتباه بود، یک خطا در خروجی می‌گذاریم ولی سیستم ادامه می‌دهد
-            metadata_json = {"error": "Invalid metadata format", "raw": args.metadata}
+            metadata = json.loads(args.metadata)
+        except json.JSONDecodeError:
+            return fail("Invalid metadata JSON.")
 
     try:
-        raw_image = Image.open(args.image_path)
-        raw_image = ImageOps.exif_transpose(raw_image).convert("RGB")
-        
-        # لود مدل و پردازشگر
-        model, processor = get_fast_tier_model(DEVICE)
-        
-        # پیش‌پردازش
-        inputs = processor(images=raw_image, return_tensors="pt").to(DEVICE)
+        import torch
+    except ImportError:
+        return fail("torch is not installed.")
 
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    vram_before = torch.cuda.memory_allocated(device) if device.type == "cuda" else 0
+
+    labels = json.loads((WEIGHTS_DIR / "labels.json").read_text())
+    model = None
+    try:
+        arch = load_arch()
+        model, _ = arch.load_model(str(WEIGHTS_DIR / "model.pth"), device.type)
+        image = ImageOps.exif_transpose(Image.open(args.image_path)).convert("RGB").resize((28, 28))
+        pixels = list(image.getdata())
+        inputs = torch.tensor(pixels, dtype=torch.float32).reshape(1, 28, 28, 3)
+        inputs = inputs.permute(0, 3, 1, 2) / 255.0
+        inputs = inputs.to(device)
         with torch.no_grad():
-            outputs = model(**inputs)
-            logits = outputs.logits
-            probabilities = torch.softmax(logits, dim=1)[0]
-            confidence, class_idx = torch.max(probabilities, dim=0)
-
+            probs = torch.softmax(model(inputs), dim=1)[0]
+            confidence, class_idx = torch.max(probs, dim=0)
         idx = int(class_idx.item())
-
+        code = labels[str(idx)]
         result = {
             "status": "success",
             "tool": "skin-lesion-fast",
             "model_tier": "tier1_fast",
-            "model_executed": "convnext_small_skin_lesion_offline",
+            "model_executed": "derm_cnn_ham10000",
             "predicted_class_index": idx,
-            "disease_name": CLASSES[idx] if idx < len(CLASSES) else "Unknown",
+            "disease_name": ISIC_TO_CLASS[code],
             "confidence_score": round(float(confidence.item()), 4),
-            "metadata": metadata_json
+            "metadata": metadata,
         }
         print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
+    except Exception as exc:  # noqa: BLE001 - CLI must report, not crash
+        return fail(f"Execution failed: {exc}")
+    finally:
+        del model
+        if device.type == "cuda":
+            torch.cuda.empty_cache()
+            if torch.cuda.memory_allocated(device) - vram_before > VRAM_BUDGET_BYTES:
+                print(json.dumps({"status": "warning", "message": "VRAM budget exceeded."}), file=sys.stderr)
 
-    except Exception as e:
-        print(json.dumps({"status": "error", "message": f"Execution failed: {str(e)}"}))
-        sys.exit(1)
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
