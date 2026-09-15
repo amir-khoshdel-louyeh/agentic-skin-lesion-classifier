@@ -1,109 +1,101 @@
+"""Mid-tier classifier: DermAI EfficientNet-B0 (models/dermai-b0).
+
+Uses the vendored transformers-native EfficientNet-B0 (model.safetensors,
+224px) — no download needed. Uniform JSON contract.
+VRAM discipline: load -> infer -> release in finally.
+"""
+
 import argparse
 import json
 import os
 import sys
+from pathlib import Path
+
 from PIL import Image, ImageOps
-import torch
-import torch.nn as nn
-from torchvision import transforms
 
-# لایبل‌های استاندارد ۷ کلاسی پروژه شما
-CLASSES = [
-    "Actinic keratoses", 
-    "Basal cell carcinoma", 
-    "Benign keratosis", 
-    "Dermatofibroma", 
-    "Melanoma", 
-    "Melanocytic nevi", 
-    "Vascular lesions"
-]
+BASE_DIR = Path(__file__).resolve().parent.parent
+WEIGHTS_DIR = BASE_DIR / "models" / "dermai-b0"
 
-SUPPORTED_CUDA_SM = {(5,0), (6,0), (6,1), (7,0), (7,5), (8,0), (8,6), (9,0), (12,0)}
-DEVICE = torch.device("cpu")
+ISIC_TO_CLASS = {
+    "akiec": "Actinic keratoses",
+    "bcc": "Basal cell carcinoma",
+    "bkl": "Benign keratosis",
+    "df": "Dermatofibroma",
+    "nv": "Melanocytic nevi",
+    "vasc": "Vascular lesions",
+    "mel": "Melanoma",
+}
 
-def select_cuda_device() -> torch.device:
-    if not torch.cuda.is_available():
-        return torch.device("cpu")
-    try:
-        capability = torch.cuda.get_device_capability()
-        if capability in SUPPORTED_CUDA_SM:
-            return torch.device("cuda")
-    except Exception:
-        pass
-    return torch.device("cpu")
+VRAM_BUDGET_BYTES = 2 * 1024**3
 
-def get_mid_tier_model(device):
-    from transformers import AutoModelForImageClassification
-    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    local_model_path = os.path.join(BASE_DIR, "models", "offline_mid")
-    
-    if not os.path.exists(local_model_path):
-        print(json.dumps({"status": "error", "message": f"Mid-tier model folder missing at: {local_model_path}"}))
-        sys.exit(1)
 
-    model = AutoModelForImageClassification.from_pretrained(local_model_path, local_files_only=True)
-    model.to(device)
-    model.eval()
-    return model
+def fail(message: str) -> int:
+    print(json.dumps({"status": "error", "message": message}))
+    return 1
 
-def main():
-    parser = argparse.ArgumentParser(description="Mid-Tier ResNet50 Offline Structural Classifier.")
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Mid-Tier EfficientNet-B0 classifier.")
     parser.add_argument("--image", dest="image_path", required=True)
     parser.add_argument("--metadata", dest="metadata", required=False)
     args = parser.parse_args()
 
-    global DEVICE
-    DEVICE = select_cuda_device()
-
     if not os.path.exists(args.image_path):
         print(json.dumps({"status": "error", "message": f"Image not found: {args.image_path}"}))
-        sys.exit(1)
+        return 1
+    if not (WEIGHTS_DIR / "model.safetensors").exists():
+        return fail(f"Mid-tier weights missing at: {WEIGHTS_DIR}")
 
-    # پردازش ایمن متادیتا (هماهنگ با فرمت JSONL)
-    metadata_json = {}
+    metadata = {}
     if args.metadata:
         try:
-            metadata_json = json.loads(args.metadata)
+            metadata = json.loads(args.metadata)
         except json.JSONDecodeError:
-            metadata_json = {"error": "Invalid metadata format"}
-
-    # پیش‌پردازش منطبق بر استانداردهای ResNet
-    transform_pipeline = transforms.Compose([
-        transforms.Resize((224, 224), interpolation=transforms.InterpolationMode.BICUBIC),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
+            return fail("Invalid metadata JSON.")
 
     try:
-        raw_image = Image.open(args.image_path)
-        raw_image = ImageOps.exif_transpose(raw_image).convert("RGB")
-        image_tensor = transform_pipeline(raw_image).unsqueeze(0).to(DEVICE)
+        import torch
+        from transformers import AutoImageProcessor, EfficientNetForImageClassification
+    except ImportError as exc:
+        return fail(f"Missing dependency: {exc}")
 
-        model = get_mid_tier_model(DEVICE)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    vram_before = torch.cuda.memory_allocated(device) if device.type == "cuda" else 0
 
+    model = None
+    try:
+        processor = AutoImageProcessor.from_pretrained(str(WEIGHTS_DIR), local_files_only=True)
+        model = EfficientNetForImageClassification.from_pretrained(
+            str(WEIGHTS_DIR), local_files_only=True).to(device).eval()
+        image = ImageOps.exif_transpose(Image.open(args.image_path)).convert("RGB")
+        inputs = processor(images=image, return_tensors="pt").to(device)
         with torch.no_grad():
-            outputs = model(image_tensor)
-            logits = outputs.logits if hasattr(outputs, 'logits') else outputs
-            probabilities = torch.softmax(logits, dim=1)[0]
-            confidence, class_idx = torch.max(probabilities, dim=0)
-
+            probs = torch.softmax(model(**inputs).logits, dim=1)[0]
+            confidence, class_idx = torch.max(probs, dim=0)
         idx = int(class_idx.item())
-
+        id2label = model.config.id2label
+        code = id2label.get(idx, id2label.get(str(idx)))
         result = {
             "status": "success",
             "tool": "skin-lesion-mid",
             "model_tier": "tier2_mid",
-            "model_executed": "resnet50_skin_lesion_offline",
+            "model_executed": "dermai_efficientnet_b0_ham10000",
             "predicted_class_index": idx,
-            "disease_name": CLASSES[idx] if idx < len(CLASSES) else "Unknown Condition",
+            "disease_name": ISIC_TO_CLASS[code],
             "confidence_score": round(float(confidence.item()), 4),
-            "metadata": metadata_json
+            "metadata": metadata,
         }
         print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
+    except Exception as exc:  # noqa: BLE001 - CLI must report, not crash
+        return fail(f"Execution failed: {exc}")
+    finally:
+        del model
+        if device.type == "cuda":
+            torch.cuda.empty_cache()
+            if torch.cuda.memory_allocated(device) - vram_before > VRAM_BUDGET_BYTES:
+                print(json.dumps({"status": "warning", "message": "VRAM budget exceeded."}), file=sys.stderr)
 
-    except Exception as e:
-        print(json.dumps({"status": "error", "message": f"Execution failed: {str(e)}"}))
-        sys.exit(1)
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
