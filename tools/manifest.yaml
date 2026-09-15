@@ -63,7 +63,7 @@ tools:
     calibrated: false
     vram_budget_gb: 5.0
     tier: tier3_high
-    status: rejected_benchmark
+    status: ready
 
   - name: multimodal-fusion
     command: tools/multimodal_fusion.py
@@ -129,7 +129,7 @@ tools:
     calibrated: false
     vram_budget_gb: 1.0
     tier: tier2_mid
-    status: rejected_benchmark
+    status: ready
 
   - name: vlm-ollama
     command: tools/vlm_ollama.py
@@ -140,7 +140,7 @@ tools:
     calibrated: false
     vram_budget_gb: 6.0
     tier: tier3_high
-    status: rejected_benchmark
+    status: ready
 
   - name: ensemble-high
     command: tools/ensemble_high.py
