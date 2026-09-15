@@ -77,7 +77,7 @@ def main() -> int:
         arch = load_arch()
         model, _ = arch.load_model(str(WEIGHTS_DIR / "model.pth"), device.type)
         image = ImageOps.exif_transpose(Image.open(args.image_path)).convert("RGB").resize((28, 28))
-        pixels = list(image.getdata())
+        pixels = list(image.get_flattened_data())
         inputs = torch.tensor(pixels, dtype=torch.float32).reshape(1, 28, 28, 3)
         inputs = inputs.permute(0, 3, 1, 2) / 255.0
         inputs = inputs.to(device)
