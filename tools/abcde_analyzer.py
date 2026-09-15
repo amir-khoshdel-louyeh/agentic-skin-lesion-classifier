@@ -153,7 +153,7 @@ def assess(image_path: str) -> dict:
     diam = diameter_px(image.shape[:2] and mask)
     # Sub-scores scaled to ~0..2 each (total 0..8). Cutoffs calibrated
     # on the 24 local ISIC2019 images so bands discriminate (see
-    # reports/phase6_benchmark_abcde.md); dermoscopy close-ups saturate
+    # report/phase6_benchmark_abcde.md); dermoscopy close-ups saturate
     # naive ABCDE mappings to "high" for every frame.
     a_pts = min(2.0, asym * 3.0)
     b_pts = min(2.0, max(0.0, (border - 1.0)) * 0.4)

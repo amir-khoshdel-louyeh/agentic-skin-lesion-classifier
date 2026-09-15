@@ -24,7 +24,7 @@ fetched, WHERE from, and its integrity hash. No training performed.
   - config.json:           84d9704a779d92e3ed7a955d5fb72fd522068f5381c911d38a6d03c0f06ae2c1
   - preprocessor_config.json: f678895d3b0b6d95f32b0ab9d683c127c69b5f45939f82932cb90eb58bffa51e
 - Label map (ISIC codes): 0 akiec, 1 bcc, 2 bkl, 3 df, 4 mel, 5 nv, 6 vasc
-- Status: benchmarked Phase 7 (reports/phase7_benchmark_dermai.md),
+- Status: benchmarked Phase 7 (report/phase7_benchmark_dermai.md),
   accuracy 0.7143 dominated by triage CNN — no agent role.
 
 ## models/drdiag-vlm/ — VLM high tier [DOWNLOADED, VERIFIED]

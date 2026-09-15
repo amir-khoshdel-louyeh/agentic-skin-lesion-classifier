@@ -5,7 +5,7 @@ category `preprocessing`, discovered at runtime via Manifest v2
 (`capable_of("cleaned_image", ["image"])`) with zero orchestrator/agent
 code changes. CPU-only OpenCV, deterministic, no weights.
 
-Chain rule (role assignment, reports/phase6_benchmark_preprocess.md):
+Chain rule (role assignment, report/phase6_benchmark_preprocess.md):
 quality-gate flags `blurry` -> run this tool -> re-run quality-gate ->
 continue the round with the cleaned image. Agents chain it; the
 orchestrator receipt check covers `python tools/*.py` commands.

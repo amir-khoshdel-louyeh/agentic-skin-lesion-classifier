@@ -32,7 +32,7 @@ from control.manifest import load_manifest
 
 PROMPT_FILE = ROOT_DIR / "prompt.yaml"
 MANIFEST_FILE = ROOT_DIR / "tools" / "manifest.yaml"
-REPORTS_DIR = ROOT_DIR / "reports"
+REPORT_DIR = ROOT_DIR / "report"
 THUMB_SIZE = (300, 300)
 
 # ----- palette -----
@@ -680,7 +680,7 @@ class App(tk.Tk):
     # ----- reports -----
     def _refresh_reports(self) -> None:
         self.report_list.delete(0, tk.END)
-        self._report_files = sorted(REPORTS_DIR.glob("*.md"))
+        self._report_files = sorted(REPORT_DIR.glob("*.md"))
         for path in self._report_files:
             tag = "round" if path.name.startswith("round_") else "doc"
             self.report_list.insert(tk.END, f"[{tag}] {path.name}")
@@ -690,7 +690,7 @@ class App(tk.Tk):
         if not sel:
             return
         name = self.report_list.get(sel[0]).split("] ", 1)[1]
-        text = (REPORTS_DIR / name).read_text(encoding="utf-8")
+        text = (REPORT_DIR / name).read_text(encoding="utf-8")
         self.report_view.delete("1.0", tk.END)
         self.report_view.insert("1.0", text)
         decision, reason = parse_decision(text)

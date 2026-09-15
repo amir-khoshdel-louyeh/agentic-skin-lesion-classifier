@@ -13,13 +13,13 @@ from control.paths import ROOT_DIR
 
 def latest_report(record_index: int, root: Path = ROOT_DIR) -> Path | None:
     candidates = sorted(
-        (root / "reports").glob(f"round_{record_index}_*.md")
+        (root / "report").glob(f"round_{record_index}_*.md")
     )
     return candidates[-1] if candidates else None
 
 
 def audit_for_record(record_index: int, root: Path = ROOT_DIR) -> list[dict]:
-    path = root / "reports" / "audit.jsonl"
+    path = root / "report" / "audit.jsonl"
     if not path.exists():
         return []
     entries = []

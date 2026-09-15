@@ -12,7 +12,7 @@ An agent-driven dermatology screening system that orchestrates multiple CNN mode
 python3 -m venv .venv --system-site-packages
 .venv/bin/pip install pyyaml pydantic torch torchvision opencv-python-headless scikit-learn
 ollama pull qwen3:8b
-openclaw models set "ollama/qwen3:8b"   # + register provider (see reports/phase0_baseline.md)
+openclaw models set "ollama/qwen3:8b"   # + register provider (see report/phase0_baseline.md)
 openclaw skills install --force ./openclaw-skills/skin-lesion-fast
 openclaw skills install --force ./openclaw-skills/skin-lesion-mid
 openclaw skills install --force ./openclaw-skills/skin-lesion-high
@@ -25,11 +25,11 @@ openclaw skills install --force ./openclaw-skills/skin-lesion-high
 Design docs: `proposal.tmp` (architecture), `plan.tmp` (phases).
 Contracts: `tools/manifest.yaml` (tools), `prompts/*.system.md` (locked) +
 `prompts/*.doctor.md` (physician-editable, thresholds 0.6–0.9).
-Reports land in `reports/` (per-round files are git-ignored runtime artifacts).
+Reports land in `report/` (per-round files are git-ignored runtime artifacts).
 
 Known limits: triage CNN overconfident, VLM weights rejected after
 benchmark, shared AK blind spot, 8B agents need receipt verification
-(see `reports/phase5_validation.md`). Research use only.
+(see `report/phase5_validation.md`). Research use only.
 
 ---
 

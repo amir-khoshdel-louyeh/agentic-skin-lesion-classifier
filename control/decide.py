@@ -86,7 +86,8 @@ def build_report(
 
 
 def append_audit(entry: dict, root: Path = ROOT_DIR) -> Path:
-    path = root / "reports" / "audit.jsonl"
+    path = root / "report" / "audit.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
     entry = dict(entry, ts=datetime.now(timezone.utc).isoformat())
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(entry, ensure_ascii=False) + "\n")

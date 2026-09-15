@@ -150,7 +150,8 @@ def run_round(
     decision = decide(verdicts)
     report = build_report(record, verdicts, decision)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    out = ROOT_DIR / "reports" / f"round_{record_index}_{stamp}.md"
+    out = ROOT_DIR / "report" / f"round_{record_index}_{stamp}.md"
+    out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(report, encoding="utf-8")
     append_audit({
         "event": "round",
