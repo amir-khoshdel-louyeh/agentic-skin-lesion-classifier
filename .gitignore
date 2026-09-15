@@ -52,6 +52,10 @@ Thumbs.db
 *.onnx
 *.safetensors
 
+# Full local ISIC 2019 download (multi-GB, never commit).
+# Only dataset/ISIC2019_test/ (24 images + CSVs) is tracked so tests can run.
+dataset/isic2019_full/
+
 # Model artifacts / outputs
 models/
 checkpoints/
