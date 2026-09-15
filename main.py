@@ -53,6 +53,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Physician debate mode on the selected record.",
     )
     parser.add_argument(
+        "--doctor-check",
+        action="store_true",
+        help="Validate prompts/*.doctor.md (bounds 0.6-0.9, "
+        "only-more-cautious, no safety overrides) and print the "
+        "effective thresholds. Exits non-zero on any violation.",
+    )
+    parser.add_argument(
         "--agent-id",
         default="main",
         help="OpenClaw agent ID (default: main).",
@@ -75,6 +82,20 @@ def resolve(path_str: str) -> Path:
 
 def main() -> None:
     args = build_parser().parse_args()
+    if args.doctor_check:
+        from control.prompts import doctor_check
+
+        report = doctor_check()
+        failed = False
+        for role, info in report.items():
+            status = "OK" if info["ok"] else "FAILED"
+            print(f"[{role}] {status}")
+            for name, value in info["effective"].items():
+                print(f"  {name}: {value}")
+            for err in info["errors"]:
+                print(f"  ! {err}")
+            failed = failed or not info["ok"]
+        raise SystemExit(1 if failed else 0)
     prompt_path = resolve(args.prompt_file)
     tool_helper_path = resolve(args.tool_helper_file)
 

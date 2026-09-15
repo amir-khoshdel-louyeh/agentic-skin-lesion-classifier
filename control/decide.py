@@ -61,6 +61,7 @@ def build_report(
     record: dict,
     verdicts: list[VerdictEnvelope],
     decision: dict,
+    thresholds: dict[str, float] | None = None,
 ) -> str:
     lines = [
         "# Medical Screening Report (research use only)",
@@ -68,6 +69,13 @@ def build_report(
         f"- Image: {record.get('image_path')}",
         f"- Metadata: {json.dumps(record.get('metadata', {}), ensure_ascii=False)}",
         f"- Decision: **{decision['decision']}** — {decision['reason']}",
+    ]
+    if thresholds:
+        lines.append(
+            "- Thresholds: "
+            + ", ".join(f"{k}={v}" for k, v in thresholds.items())
+        )
+    lines += [
         "",
         "## Agent verdicts",
         "",

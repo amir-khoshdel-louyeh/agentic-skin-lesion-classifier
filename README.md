@@ -24,7 +24,9 @@ openclaw skills install --force ./openclaw-skills/skin-lesion-high
 
 Design docs: `proposal.tmp` (architecture), `plan.tmp` (phases).
 Contracts: `tools/manifest.yaml` (tools), `prompts/*.system.md` (locked) +
-`prompts/*.doctor.md` (physician-editable, thresholds 0.6–0.9).
+`prompts/*.doctor.md` (physician-editable, thresholds 0.6–0.9, only toward
+caution — validate with `.venv/bin/python main.py --doctor-check` or the
+GUI Doctor tab; rounds fail fast on invalid edits).
 Reports land in `report/` (per-round files are git-ignored runtime artifacts).
 
 Known limits: triage CNN overconfident, VLM weights rejected after

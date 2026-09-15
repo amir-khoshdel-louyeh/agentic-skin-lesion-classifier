@@ -19,6 +19,7 @@ from agents.runner import run_agent
 from control.decide import append_audit, build_report, decide
 from control.manifest import load_manifest, render_for_agents
 from control.paths import resolve, startup_path_check
+from control.prompts import effective_thresholds
 from control.schemas import VerdictEnvelope
 
 AGENT_ROLES = (
@@ -133,8 +134,15 @@ def run_round(
     prompt_file: str = "prompt.yaml",
     tool_helper_file: str = "tools/manifest.yaml",
     agent_id: str = "main",
+    borderline_threshold: float | None = None,
 ) -> Path:
     startup_path_check()
+    # Physician customization (Phase 8): the doctor's validated thresholds
+    # drive the decision — never a hardcoded constant. Invalid doctor files
+    # fail the round fast instead of running with silent defaults.
+    thresholds = effective_thresholds("orchestrator")
+    if borderline_threshold is None:
+        borderline_threshold = thresholds["borderline_threshold"]
     prompt_path = resolve(prompt_file)
     record = load_record(prompt_path, record_index)
     manifest = load_manifest(resolve(tool_helper_file))
@@ -147,8 +155,8 @@ def run_round(
         claimed = run_agent(record_with_role, manifest_text, agent_id=agent_id)
         verdicts.append(verify_receipt(claimed, record, manifest))
 
-    decision = decide(verdicts)
-    report = build_report(record, verdicts, decision)
+    decision = decide(verdicts, borderline_threshold=borderline_threshold)
+    report = build_report(record, verdicts, decision, thresholds=thresholds)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     out = ROOT_DIR / "report" / f"round_{record_index}_{stamp}.md"
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -160,6 +168,7 @@ def run_round(
         "decision": decision["decision"],
         "reason": decision["reason"],
         "report": out.name,
+        "thresholds": thresholds,
     })
     ping(f"Round {record_index} complete: {decision['decision']} ({out.name})",
          level="info")

@@ -33,6 +33,7 @@ from control.manifest import load_manifest
 PROMPT_FILE = ROOT_DIR / "prompt.yaml"
 MANIFEST_FILE = ROOT_DIR / "tools" / "manifest.yaml"
 REPORT_DIR = ROOT_DIR / "report"
+PROMPTS_DIR = ROOT_DIR / "prompts"
 THUMB_SIZE = (300, 300)
 
 # ----- palette -----
@@ -242,6 +243,7 @@ class App(tk.Tk):
         self._build_tools_tab()
         self._build_reports_tab()
         self._build_chat_tab()
+        self._build_doctor_tab()
 
         self.status = ttk.Label(self, text="Ready", style="Muted.TLabel",
                                 anchor=tk.W)
@@ -479,6 +481,103 @@ class App(tk.Tk):
             self._chat_line("System: OpenClaw CLI not found — chat "
                             "disabled. Rounds still work; or use "
                             "main.py --chat.", "sys")
+
+    # ----- doctor tab (Phase 8 physician customization) -----
+    def _build_doctor_tab(self) -> None:
+        tab = ttk.Frame(self)
+        self.tabs.add(tab, text="  Doctor  ")
+        ttk.Label(tab, text="Edit role focus, tone and thresholds. Bounds "
+                  "0.6–0.9, only toward caution; safety rules stay locked. "
+                  "Invalid edits are refused on save.",
+                  style="Muted.TLabel", wraplength=700).pack(
+                      anchor=tk.W, padx=10, pady=(8, 0))
+        bar = ttk.Frame(tab)
+        bar.pack(fill=tk.X, padx=10, pady=6)
+        ttk.Label(bar, text="Role:").pack(side=tk.LEFT)
+        self.doctor_role = tk.StringVar(value="orchestrator")
+        roles = ttk.Combobox(bar, textvariable=self.doctor_role,
+                             values=("orchestrator", "agent"),
+                             state="readonly", width=14)
+        roles.pack(side=tk.LEFT, padx=6)
+        roles.bind("<<ComboboxSelected>>",
+                   lambda _e: self._load_doctor())
+        ttk.Button(bar, text="Reload",
+                   command=self._load_doctor).pack(side=tk.LEFT)
+        ttk.Button(bar, text="Validate",
+                   command=self._validate_doctor).pack(side=tk.LEFT,
+                                                       padx=6)
+        ttk.Button(bar, text="Save & Validate", style="Accent.TButton",
+                   command=self._save_doctor).pack(side=tk.LEFT)
+        self.doctor_text = tk.Text(tab, wrap=tk.WORD, font=MONO, bg=CARD,
+                                   relief=tk.FLAT, padx=8, pady=8)
+        self.doctor_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=4)
+        self.doctor_status = ttk.Label(tab, text="", style="Muted.TLabel",
+                                       wraplength=700, justify=tk.LEFT)
+        self.doctor_status.pack(anchor=tk.W, padx=10, pady=(0, 8))
+        self._load_doctor()
+        self._refresh_doctor_status()
+
+    def _doctor_path(self) -> Path:
+        return PROMPTS_DIR / f"{self.doctor_role.get()}.doctor.md"
+
+    def _load_doctor(self) -> None:
+        try:
+            text = self._doctor_path().read_text(encoding="utf-8")
+        except OSError as exc:
+            messagebox.showerror("Doctor", f"Cannot read file: {exc}")
+            return
+        self.doctor_text.delete("1.0", tk.END)
+        self.doctor_text.insert("1.0", text)
+
+    def _validate_doctor(self) -> None:
+        from control.prompts import check_locked, validate_thresholds
+
+        role = self.doctor_role.get()
+        try:
+            check_locked(role)
+            found = validate_thresholds(
+                self.doctor_text.get("1.0", tk.END), role=role)
+        except ValueError as exc:
+            messagebox.showerror("Doctor — invalid", str(exc))
+            return
+        messagebox.showinfo("Doctor — valid",
+                            f"{role}.doctor.md is valid: {found or 'no '
+                             'threshold changes'}.")
+
+    def _save_doctor(self) -> None:
+        from control.prompts import check_locked, validate_thresholds
+
+        role = self.doctor_role.get()
+        text = self.doctor_text.get("1.0", tk.END)
+        try:
+            check_locked(role)
+            validate_thresholds(text, role=role)
+        except ValueError as exc:
+            messagebox.showerror("Doctor — save refused", str(exc))
+            return
+        try:
+            self._doctor_path().write_text(text, encoding="utf-8")
+        except OSError as exc:
+            messagebox.showerror("Doctor", f"Cannot save file: {exc}")
+            return
+        self._refresh_doctor_status()
+        messagebox.showinfo("Doctor", f"{role}.doctor.md saved and valid. "
+                            "New rounds use these thresholds.")
+
+    def _refresh_doctor_status(self) -> None:
+        from control.prompts import doctor_check
+
+        report = doctor_check()
+        lines = []
+        for role, info in report.items():
+            eff = ", ".join(f"{k}={v}"
+                            for k, v in info["effective"].items())
+            if info["ok"]:
+                lines.append(f"{role}: {eff}")
+            else:
+                lines.append(f"{role} INVALID: {'; '.join(info['errors'])}")
+        self.doctor_status.configure(text="Effective thresholds — "
+                                          + " | ".join(lines))
 
     # ----- infra -----
     def _set_busy(self, busy: bool, text: str) -> None:
