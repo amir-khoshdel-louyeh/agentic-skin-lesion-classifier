@@ -1,10 +1,12 @@
 """VLM high-tier wrapper: HAM10000 fine-tuned Qwen2-VL 2B (Phase 2).
 
 Generative VLM, not a classifier head: the model names one of the 7
-classes in constrained text. Confidence is left null — the orchestrator
-supplies calibrated confidence via the closed-set protocol
-(control/confidence.py). VRAM: full LLM unload required before this
-tool (sequential schedule); release in finally.
+classes in constrained text. There are no logits, so confidence is a
+nominal uncalibrated 0.5 with a "borderline" flag — countable for
+decide.py/eval.py but never clears a case as benign on its own
+(decide.py forces suspicious-refer on any borderline flag).
+VRAM: full LLM unload required before this tool (sequential schedule);
+release in finally.
 """
 
 import argparse
@@ -13,6 +15,10 @@ import os
 import re
 import sys
 from pathlib import Path
+
+# Nominal confidence for generative verdicts (no logits exist).
+# Kept below every doctor threshold (0.6-0.9) on purpose.
+NOMINAL_CONFIDENCE = 0.5
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 MODEL_DIR = BASE_DIR / "models" / "drdiag-vlm"
@@ -114,7 +120,8 @@ def main() -> int:
             "model_executed": "drdiag_qwen2vl_ham10000",
             "predicted_class_index": CLASSES.index(predicted),
             "disease_name": predicted,
-            "confidence_score": None,
+            "confidence_score": NOMINAL_CONFIDENCE,
+            "uncertainty_flags": ["borderline"],
             "raw_reply": reply.strip(),
             "metadata": metadata,
         }
