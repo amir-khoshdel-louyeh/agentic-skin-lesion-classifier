@@ -54,7 +54,9 @@ Thumbs.db
 
 # Full local ISIC 2019 download (multi-GB, never commit).
 # Only dataset/ISIC2019_test/ (24 images + CSVs) is tracked so tests can run.
-dataset/isic2019_full/
+# Inside ISIC2019_full/, everything is ignored except help.md.
+dataset/ISIC2019_full/*
+!dataset/ISIC2019_full/help.md
 
 # Model artifacts / outputs
 models/
@@ -99,6 +101,6 @@ dataset_portions.txt
 openclaw.jason
 test.jpg
 proposal.md
-help.md
+/help.md
 
 
