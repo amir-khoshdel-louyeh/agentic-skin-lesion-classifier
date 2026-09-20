@@ -1,9 +1,11 @@
 """Ollama VLM wrapper: stronger small VLM candidate (Phase 7).
 
 Sends the lesion image to a vision-capable Ollama model with a
-constrained 7-class prompt and JSON mode. Confidence is null by design
-(calibrated later via control/confidence.py closed-set protocol) —
-same contract as tools/drdiag_vlm.py.
+constrained 7-class prompt and JSON mode. The VLM returns only a class
+name (no logits), so confidence is a nominal uncalibrated 0.5 with a
+"borderline" flag — countable for decide.py/eval.py but never clears
+a case as benign on its own (decide.py forces suspicious-refer on any
+borderline flag). Same contract as tools/drdiag_vlm.py.
 
 Sequential GPU rule: every request passes keep_alive=0 so the VLM
 unloads after inference and never competes with the qwen3:8b agent LLM
@@ -15,6 +17,10 @@ import base64
 import json
 import os
 import urllib.request
+
+# Nominal confidence for generative verdicts (no logits exist).
+# Kept below every doctor threshold (0.6-0.9) on purpose.
+NOMINAL_CONFIDENCE = 0.5
 
 CLASSES = [
     "Actinic keratoses",
@@ -132,7 +138,8 @@ def main() -> int:
             "model_executed": f"ollama_{args.model}",
             "predicted_class_index": CLASSES.index(predicted),
             "disease_name": predicted,
-            "confidence_score": None,
+            "confidence_score": NOMINAL_CONFIDENCE,
+            "uncertainty_flags": ["borderline"],
             "reasoning": reasoning,
             "attempts": attempts,
             "metadata": metadata,
