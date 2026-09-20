@@ -6,18 +6,18 @@ You have access to the following local CLI tools for skin lesion analysis. You m
 
 ### 1. Tier 1: Fast Screening Classifier
 * **Command:** `python tools/skin_lesion_fast.py --image <path> [--metadata <json>]`
-* **Model:** ConvNeXt-Small (Optimized for speed)
+* **Model:** SkinCNN triage (`models/derm-cnn`, 28×28 input, `derm_cnn_ham10000`)
 * **Purpose:** Initial first-pass screening.
 
 ### 2. Tier 2: Mid Verification Classifier
 * **Command:** `python tools/skin_lesion_mid.py --image <path> [--metadata <json>]`
-* **Model:** Swin-Tiny (Balanced accuracy)
+* **Model:** DermAI EfficientNet-B0 (`models/dermai-b0`, 224px, `dermai_efficientnet_b0_ham10000`)
 * **Purpose:** Reliable secondary verification for ambiguous cases.
 
 ### 3. Tier 3: High Precision Classifier
 * **Command:** `python tools/skin_lesion_high.py --image <path> [--metadata <json>]`
-* **Model:** ViT-Large (SOTA accuracy)
-* **Purpose:** Critical analysis required only when lower tiers return sub-threshold confidence.
+* **Model:** Cross-attention image+metadata fusion (`models/multimodal/best.pt`, 224px, `cross_attention_fusion_ham10000`)
+* **Purpose:** Critical analysis required only when lower tiers return sub-threshold confidence. Output adds `entropy`, `entropy_threshold`, and `uncertainty_flags` (entropy-gated; uncertain cases carry `"borderline"`).
 
 ---
 
