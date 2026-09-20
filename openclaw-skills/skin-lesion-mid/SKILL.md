@@ -1,12 +1,12 @@
 ---
 name: skin-lesion-mid
-description: Local OpenClaw tool for balanced skin lesion screening using EfficientNet-B4.
+description: Local OpenClaw tool for balanced skin lesion screening using EfficientNet-B0.
 metadata: { "openclaw": { "requires": { "bins": ["python"] } } }
 ---
 
 # skin-lesion-mid
 
-This skill runs the balanced skin lesion model using EfficientNet-B4.
+This skill runs the balanced skin lesion model using DermAI EfficientNet-B0.
 
 ## Command
 
@@ -17,9 +17,9 @@ python tools/skin_lesion_mid.py --image <path_to_image>
 ## Behavior
 
 - Uses internal model tier `tier2_mid`
-- Runs `efficientnet_b4` as the mid-tier screening model
+- Runs `dermai_efficientnet_b0_ham10000` (`models/dermai-b0`) as the mid-tier screening model
 - Intended for higher-quality predictions with moderate latency
-- Uses a 380x380 input resize for EfficientNet-B4
+- Uses the vendored image processor (224px) from `models/dermai-b0`
 
 ## Output
 
