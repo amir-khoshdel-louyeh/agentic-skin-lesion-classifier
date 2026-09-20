@@ -1,6 +1,6 @@
 ---
 name: skin-lesion-fast
-description: Local OpenClaw tool for fast skin lesion screening using EfficientNet-B0.
+description: Local OpenClaw tool for fast skin lesion screening using SkinCNN triage.
 metadata: { "openclaw": { "requires": { "bins": ["python"] } } }
 ---
 
@@ -17,7 +17,7 @@ python tools/skin_lesion_fast.py --image <path_to_image>
 ## Behavior
 
 - Uses internal model tier `tier1_fast`
-- Runs `efficientnet_b0` as the first-pass screening model
+- Runs `derm_cnn_ham10000` (SkinCNN, `models/derm-cnn`, 28×28 input) as the first-pass screening model
 - Intended for low-latency, quick detection and early filtering
 
 ## Output
