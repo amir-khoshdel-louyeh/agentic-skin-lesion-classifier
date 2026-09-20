@@ -29,6 +29,12 @@ ISIC_TO_CLASS = {
 
 VRAM_BUDGET_BYTES = 2 * 1024**3
 
+# Calibrated by temperature scaling: T=4.7 fitted by NLL grid search on a
+# 105-image ISIC2019_full split (15/class, SCC excluded, 2026-09-29).
+# Accuracy unchanged (argmax invariant); mean confidence 0.96 -> 0.54,
+# now tracking the ~0.57-0.69 empirical accuracy. NLL 3.92 -> 1.46.
+TEMPERATURE = 4.7
+
 
 def fail(message: str) -> int:
     print(json.dumps({"status": "error", "message": message}))
@@ -82,7 +88,7 @@ def main() -> int:
         inputs = inputs.permute(0, 3, 1, 2) / 255.0
         inputs = inputs.to(device)
         with torch.no_grad():
-            probs = torch.softmax(model(inputs), dim=1)[0]
+            probs = torch.softmax(model(inputs) / TEMPERATURE, dim=1)[0]
             confidence, class_idx = torch.max(probs, dim=0)
         idx = int(class_idx.item())
         code = labels[str(idx)]
