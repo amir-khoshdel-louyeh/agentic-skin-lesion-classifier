@@ -22,7 +22,7 @@ DX_TO_CLASS = {
 
 
 def load_ground_truth(root: Path = ROOT_DIR) -> dict[str, str]:
-    csv_path = root / "dataset" / "ISIC_2019_Training_GroundTruth.csv"
+    csv_path = root / "dataset" / "ISIC2019_full" / "ISIC_2019_Training_GroundTruth.csv"
     labels: dict[str, str] = {}
     with csv_path.open(encoding="utf-8") as handle:
         for row in csv.DictReader(handle):
@@ -67,6 +67,6 @@ def score(
 
 
 def local_image_stems(root: Path = ROOT_DIR) -> list[str]:
-    return sorted(
-        p.stem for p in (root / "dataset" / "ISIC2019").glob("*.jpg")
-    )
+    test = list((root / "dataset" / "ISIC2019_test").glob("*.jpg"))
+    full = list((root / "dataset" / "ISIC2019_full").glob("*/*.jpg"))
+    return sorted({p.stem for p in test + full})
