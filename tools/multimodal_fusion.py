@@ -32,6 +32,14 @@ IDX_TO_CLASS = {
 
 VRAM_BUDGET_BYTES = 1 * 1024**3
 
+# Calibrated by temperature scaling: T=3.65 fitted by NLL grid search on a
+# 105-image ISIC2019_full split (15/class, SCC excluded, unknown metadata,
+# 2026-09-29). Accuracy unchanged (argmax invariant); mean confidence
+# 0.63 -> 0.31, tracking the ~0.38-0.44 empirical accuracy. NLL 2.44 -> 1.74.
+# NOTE: accuracy itself is weak without real age/sex metadata —
+# callers should keep entropy/borderline gating (see ensemble_high.py).
+TEMPERATURE = 3.65
+
 PREPROCESS = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
@@ -97,7 +105,7 @@ def main() -> int:
             localization=metadata.get("localization"),
         ).unsqueeze(0).to(device)
         with torch.no_grad():
-            probs = torch.softmax(model(inputs, meta), dim=1)[0]
+            probs = torch.softmax(model(inputs, meta) / TEMPERATURE, dim=1)[0]
             confidence, class_idx = torch.max(probs, dim=0)
         idx = int(class_idx.item())
         result = {
