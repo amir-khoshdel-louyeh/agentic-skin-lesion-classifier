@@ -47,6 +47,12 @@ MM_IDX_TO_CLASS = {
 
 VRAM_BUDGET_BYTES = 2 * 1024**3
 
+# Member temperatures from NLL grid search on a 105-image ISIC2019_full
+# split (15/class, SCC excluded, 2026-09-29): triage-CNN T=4.7,
+# multimodal T=3.65. Calibrated members -> calibrated mean.
+CNN_TEMPERATURE = 4.7
+MM_TEMPERATURE = 3.65
+
 MM_PREPROCESS = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
@@ -78,7 +84,7 @@ def member_cnn(torch, device) -> dict[str, float]:
     try:
         inputs = cnn_preprocess(IMAGE_PATH, torch, device)
         with torch.no_grad():
-            probs = torch.softmax(model(inputs), dim=1)[0]
+            probs = torch.softmax(model(inputs) / CNN_TEMPERATURE, dim=1)[0]
         return {ISIC_TO_CLASS[labels[str(i)]]: float(probs[i])
                 for i in range(len(labels))}
     finally:
@@ -105,7 +111,7 @@ def member_multimodal(torch, device, metadata: dict) -> dict[str, float]:
             localization=metadata.get("localization"),
         ).unsqueeze(0).to(device)
         with torch.no_grad():
-            probs = torch.softmax(model(inputs, meta), dim=1)[0]
+            probs = torch.softmax(model(inputs, meta) / MM_TEMPERATURE, dim=1)[0]
         return {MM_IDX_TO_CLASS[i]: float(probs[i])
                 for i in range(len(MM_IDX_TO_CLASS))}
     finally:
