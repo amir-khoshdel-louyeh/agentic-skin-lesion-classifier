@@ -7,7 +7,7 @@ tools:
     requires: [image]
     produces: [screening_verdict]
     modality: image
-    calibrated: false
+    calibrated: true
     vram_budget_gb: 1.0
     tier: tier1_fast
 
@@ -18,7 +18,7 @@ tools:
     requires: [image]
     produces: [screening_verdict]
     modality: image
-    calibrated: false
+    calibrated: true
     vram_budget_gb: 1.5
     tier: tier2_mid
 
@@ -29,7 +29,7 @@ tools:
     requires: [image]
     produces: [screening_verdict]
     modality: image
-    calibrated: false
+    calibrated: true
     vram_budget_gb: 2.0
     tier: tier3_high
 
@@ -39,7 +39,7 @@ tools:
     requires: [image]
     produces: [screening_verdict]
     modality: image
-    calibrated: false
+    calibrated: true
     vram_budget_gb: 1.0
     tier: tier1_fast
     status: ready
@@ -126,7 +126,7 @@ tools:
     requires: [image]
     produces: [screening_verdict]
     modality: image
-    calibrated: false
+    calibrated: true
     vram_budget_gb: 1.0
     tier: tier2_mid
     status: ready
@@ -148,7 +148,7 @@ tools:
     requires: [image, metadata]
     produces: [screening_verdict]
     modality: image+metadata
-    calibrated: false
+    calibrated: true
     vram_budget_gb: 2.0
     tier: tier3_high
     status: ready
