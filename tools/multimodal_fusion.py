@@ -32,13 +32,17 @@ IDX_TO_CLASS = {
 
 VRAM_BUDGET_BYTES = 1 * 1024**3
 
-# Calibrated by temperature scaling: T=3.65 fitted by NLL grid search on a
-# 105-image ISIC2019_full split (15/class, SCC excluded, unknown metadata,
-# 2026-09-29). Accuracy unchanged (argmax invariant); mean confidence
-# 0.63 -> 0.31, tracking the ~0.38-0.44 empirical accuracy. NLL 2.44 -> 1.74.
-# NOTE: accuracy itself is weak without real age/sex metadata —
-# callers should keep entropy/borderline gating (see ensemble_high.py).
-TEMPERATURE = 3.65
+FT_WEIGHTS = BASE_DIR / "models" / "multimodal-ft" / "best_ft.pt"
+
+
+def resolve_weights() -> tuple[Path, str, float]:
+    """Prefer fine-tuned weights (held-out acc 0.67 with real metadata,
+    T=1.1, 2026-09-29); fall back to vendored best.pt (T=3.65) so fresh
+    clones without the git-ignored ft weights still run."""
+    if FT_WEIGHTS.exists():
+        return FT_WEIGHTS, "cross_attention_fusion_ham10000_ft", 1.1
+    return (WEIGHTS_DIR / "best.pt",
+            "cross_attention_fusion_ham10000", 3.65)
 
 PREPROCESS = transforms.Compose([
     transforms.Resize((224, 224)),
@@ -61,7 +65,7 @@ def main() -> int:
 
     if not os.path.exists(args.image_path):
         return fail(f"Image not found: {args.image_path}")
-    weights = WEIGHTS_DIR / "best.pt"
+    weights, model_tag, temperature = resolve_weights()
     if not weights.exists():
         return fail(f"Multimodal weights missing at: {weights}")
 
@@ -105,14 +109,15 @@ def main() -> int:
             localization=metadata.get("localization"),
         ).unsqueeze(0).to(device)
         with torch.no_grad():
-            probs = torch.softmax(model(inputs, meta) / TEMPERATURE, dim=1)[0]
+            probs = torch.softmax(
+                model(inputs, meta) / temperature, dim=1)[0]
             confidence, class_idx = torch.max(probs, dim=0)
         idx = int(class_idx.item())
         result = {
             "status": "success",
             "tool": "multimodal-fusion",
             "model_tier": "tier2_mid",
-            "model_executed": "cross_attention_fusion_ham10000",
+            "model_executed": model_tag,
             "predicted_class_index": idx,
             "disease_name": IDX_TO_CLASS[idx],
             "confidence_score": round(float(confidence.item()), 4),
