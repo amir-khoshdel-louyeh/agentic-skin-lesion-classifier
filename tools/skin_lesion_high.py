@@ -48,7 +48,15 @@ MM_IDX_TO_CLASS = {
 }
 
 CNN_TEMPERATURE = 4.7
-MM_TEMPERATURE = 3.65
+MM_FT_WEIGHTS = BASE_DIR / "models" / "multimodal-ft" / "best_ft.pt"
+
+
+def mm_weights() -> tuple[Path, float]:
+    """Prefer fine-tuned weights (held-out acc 0.67, T=1.1), fallback to
+    vendored best.pt (T=3.65) so fresh clones still run."""
+    if MM_FT_WEIGHTS.exists():
+        return MM_FT_WEIGHTS, 1.1
+    return MM_DIR / "best.pt", 3.65
 VRAM_BUDGET_BYTES = 2 * 1024**3
 
 MM_PREPROCESS = transforms.Compose([
@@ -97,7 +105,8 @@ def member_multimodal(torch, device, metadata: dict) -> dict[str, float]:
     arch = load_mm_arch()
     model = arch.CrossAttentionFusionModel(meta_dim=19, num_classes=7)
     try:
-        checkpoint = torch.load(str(MM_DIR / "best.pt"),
+        mm_path, mm_temp = mm_weights()
+        checkpoint = torch.load(str(mm_path),
                                 map_location=device, weights_only=False)
         state = checkpoint["model"] if "model" in checkpoint else checkpoint
         model.load_state_dict(state)
@@ -112,7 +121,7 @@ def member_multimodal(torch, device, metadata: dict) -> dict[str, float]:
         ).unsqueeze(0).to(device)
         with torch.no_grad():
             probs = torch.softmax(
-                model(inputs, meta) / MM_TEMPERATURE, dim=1)[0]
+                model(inputs, meta) / mm_temp, dim=1)[0]
         return {MM_IDX_TO_CLASS[i]: float(probs[i])
                 for i in range(len(MM_IDX_TO_CLASS))}
     finally:
