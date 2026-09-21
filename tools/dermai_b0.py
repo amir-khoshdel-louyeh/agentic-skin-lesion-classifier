@@ -30,6 +30,11 @@ ISIC_TO_CLASS = {
 
 VRAM_BUDGET_BYTES = 2 * 1024**3
 
+# Calibrated by temperature scaling: T=4.9 fitted by NLL grid search on a
+# 105-image ISIC2019_full split (15/class, SCC excluded, 2026-09-29).
+# Shared weights/arch with tools/skin_lesion_mid.py, hence the same T.
+TEMPERATURE = 4.9
+
 
 def fail(message: str) -> int:
     print(json.dumps({"status": "error", "message": message}))
@@ -73,7 +78,7 @@ def main() -> int:
             Image.open(args.image_path)).convert("RGB")
         inputs = processor(images=image, return_tensors="pt").to(device)
         with torch.no_grad():
-            probs = torch.softmax(model(**inputs).logits, dim=1)[0]
+            probs = torch.softmax(model(**inputs).logits / TEMPERATURE, dim=1)[0]
             confidence, class_idx = torch.max(probs, dim=0)
         idx = int(class_idx.item())
         id2label = model.config.id2label
