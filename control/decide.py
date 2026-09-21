@@ -89,7 +89,13 @@ def build_report(
             f"- reasoning: {v.reasoning}",
             "",
         ]
-    lines += ["Research use only — not a medical diagnosis.", ""]
+    lines += [
+        "Coverage: 7 HAM10000 classes only — squamous cell carcinoma (SCC) "
+        "and other conditions are out of coverage; flat uncertain cases "
+        "are referred, never forced into a near class.",
+        "Research use only — not a medical diagnosis.",
+        "",
+    ]
     return "\n".join(lines)
 
 
