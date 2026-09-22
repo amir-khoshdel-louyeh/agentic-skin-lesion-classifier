@@ -18,6 +18,7 @@ You have access to the following local CLI tools for skin lesion analysis. You m
 * **Command:** `python tools/skin_lesion_high.py --image <path> [--metadata <json>]`
 * **Model:** Cross-attention image+metadata fusion (`models/multimodal/best.pt`, 224px, `cross_attention_fusion_ham10000`)
 * **Purpose:** Critical analysis required only when lower tiers return sub-threshold confidence. Output adds `entropy`, `entropy_threshold`, and `uncertainty_flags` (entropy-gated; uncertain cases carry `"borderline"`).
+* **Coverage:** 7 HAM10000 classes only. Squamous cell carcinoma (SCC) is out of coverage: SCC entropy is indistinguishable from in-coverage cases (median 1.07 vs 1.08 on 215 local images), so no detector flag exists — uncertain cases are referred, never forced into a near class.
 
 ---
 
