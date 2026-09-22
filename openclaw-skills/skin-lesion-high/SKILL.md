@@ -25,6 +25,7 @@ python tools/skin_lesion_high.py --image <path_to_image> [--metadata '<json_stri
   - Resize to `224×224`
   - ImageNet normalization (mean `0.485/0.456/0.406`, std `0.229/0.224/0.225`)
 - Output adds `entropy`, `entropy_threshold`, and `uncertainty_flags` (uncertain cases carry `"borderline"`)
+- Coverage is 7 HAM10000 classes only; squamous cell carcinoma (SCC) is out of coverage and cannot be detected by entropy — refer uncertain cases, never force them into a near class
 - Accepts optional metadata as a JSON string and includes it in the output
 - Intended for high-confidence final classification after lower-tier screening or whenever maximum accuracy is desired
 
