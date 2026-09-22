@@ -22,6 +22,8 @@ NOMINAL_CONFIDENCE = 0.5
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 MODEL_DIR = BASE_DIR / "models" / "drdiag-vlm"
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
 
 CLASSES = [
     "Actinic keratoses",
@@ -70,6 +72,12 @@ def main() -> int:
             metadata = json.loads(args.metadata)
         except json.JSONDecodeError:
             return fail("Invalid metadata JSON.")
+
+    from control.vram import check as vram_check  # noqa: E402
+
+    vram_ok, vram_reason = vram_check(5.0)
+    if not vram_ok:
+        return fail(f"VRAM guard: {vram_reason}")
 
     try:
         import torch
