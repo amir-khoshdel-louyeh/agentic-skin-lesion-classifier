@@ -16,6 +16,8 @@ from PIL import Image, ImageOps
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 WEIGHTS_DIR = BASE_DIR / "models" / "derm-cnn"
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
 
 ISIC_TO_CLASS = {
     "akiec": "Actinic keratoses",
@@ -73,6 +75,12 @@ def main() -> int:
         import torch
     except ImportError:
         return fail("torch is not installed.")
+
+    from control.vram import check as vram_check  # noqa: E402
+
+    vram_ok, vram_reason = vram_check(1.0)
+    if not vram_ok:
+        return fail(f"VRAM guard: {vram_reason}")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     vram_before = torch.cuda.memory_allocated(device) if device.type == "cuda" else 0
