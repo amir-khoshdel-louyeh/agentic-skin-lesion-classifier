@@ -15,6 +15,8 @@ from PIL import Image, ImageOps
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 WEIGHTS_DIR = BASE_DIR / "models" / "dermai-b0"
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
 
 ISIC_TO_CLASS = {
     "akiec": "Actinic keratoses",
@@ -64,6 +66,12 @@ def main() -> int:
         from transformers import AutoImageProcessor, EfficientNetForImageClassification
     except ImportError as exc:
         return fail(f"Missing dependency: {exc}")
+
+    from control.vram import check as vram_check  # noqa: E402
+
+    vram_ok, vram_reason = vram_check(1.5)
+    if not vram_ok:
+        return fail(f"VRAM guard: {vram_reason}")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     vram_before = torch.cuda.memory_allocated(device) if device.type == "cuda" else 0
