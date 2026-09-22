@@ -153,6 +153,12 @@ def main() -> int:
             return fail("Invalid metadata JSON.")
     IMAGE_PATH = args.image_path
 
+    from control.vram import check as vram_check  # noqa: E402
+
+    vram_ok, vram_reason = vram_check(2.0)
+    if not vram_ok:
+        return fail(f"VRAM guard: {vram_reason}")
+
     try:
         import torch
     except ImportError:
