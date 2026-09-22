@@ -19,6 +19,8 @@ from torchvision import transforms
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 WEIGHTS_DIR = BASE_DIR / "models" / "multimodal"
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
 
 IDX_TO_CLASS = {
     0: "Actinic keratoses",
@@ -80,6 +82,12 @@ def main() -> int:
         import torch
     except ImportError:
         return fail("torch is not installed.")
+
+    from control.vram import check as vram_check  # noqa: E402
+
+    vram_ok, vram_reason = vram_check(1.0)
+    if not vram_ok:
+        return fail(f"VRAM guard: {vram_reason}")
 
     spec = importlib.util.spec_from_file_location(
         "mm_arch", WEIGHTS_DIR / "arch.py"
