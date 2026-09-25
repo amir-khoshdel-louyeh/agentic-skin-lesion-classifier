@@ -56,7 +56,7 @@ HEAD_FONT = ("TkDefaultFont", 16, "bold")
 
 TOOL_BLURBS = {
     "ham10000-cnn": "Fast triage CNN — first pass, seconds per image.",
-    "quality-gate": "Blur / exposure / resolution check before diagnosis.",
+    "quality-gate": "Blur / exposure / resolution check before screening.",
     "multimodal-fusion": "Image + age/sex second opinion, calibrated.",
     "abcde-analyzer": "Deterministic shape/color heuristic (support flag).",
     "preprocess": "Hair removal + denoise; cleaned copy for re-check.",
