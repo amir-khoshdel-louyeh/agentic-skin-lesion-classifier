@@ -138,6 +138,7 @@ def run_round(
     tool_helper_file: str = "tools/manifest.yaml",
     agent_id: str = "main",
     borderline_threshold: float | None = None,
+    careful: bool = False,
 ) -> Path:
     startup_path_check()
     # Physician customization (Phase 8): the doctor's validated thresholds
@@ -146,6 +147,10 @@ def run_round(
     thresholds = effective_thresholds("orchestrator")
     if borderline_threshold is None:
         borderline_threshold = thresholds["borderline_threshold"]
+    if careful:
+        # "Be more careful" is a concrete route, not effort: one step
+        # tighter within doctor bounds, logged in the audit.
+        borderline_threshold = min(borderline_threshold + 0.05, 0.9)
     prompt_path = resolve(prompt_file)
     record = load_record(prompt_path, record_index)
     manifest = load_manifest(resolve(tool_helper_file))
@@ -176,6 +181,7 @@ def run_round(
         "event": "round",
         "record_index": record_index,
         "image": record.get("image_path"),
+        "careful": careful,
         "route": route_info,
         "guard": {"passed": guard["passed"], "flags": guard["flags"]},
         "abcde": {"risk_band": abcde["risk_band"],
