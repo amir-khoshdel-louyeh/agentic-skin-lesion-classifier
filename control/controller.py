@@ -66,3 +66,32 @@ def load_case(record_index: int, root: Path = ROOT_DIR) -> CaseState:
         reason=reason,
         thresholds=thresholds,
     )
+
+
+EVIDENCE_RULE = (
+    "Answer ONLY from the evidence below. Cite the receipt or report "
+    "line for every factual claim (class, confidence, flag, threshold). "
+    "If the question goes beyond the evidence, say exactly: "
+    "\"Not in the record — missing evidence: <what>.\" "
+    "Never reinterpret tool numbers, never invent a diagnosis, and never "
+    "change the recorded decision. You are narrating tools that already "
+    "ran; you did not diagnose anything."
+)
+
+
+def build_question_prompt(state: CaseState, question: str) -> str:
+    """Fresh-session prompt: stored evidence + one question + the rule."""
+    if not state.loaded:
+        raise ValueError("CaseState is empty — load_case() first.")
+    receipts = "\n".join(
+        json.dumps(e, ensure_ascii=False) for e in state.receipts
+    )
+    return (
+        "You are the screening controller discussing a completed round "
+        "with the physician.\n\n"
+        f"{EVIDENCE_RULE}\n\n"
+        f"--- ROUND REPORT ({state.report_name}) ---\n"
+        f"{state.report_text}\n"
+        f"--- AUDIT RECEIPTS ---\n{receipts or '(none)'}\n\n"
+        f"Physician question: {question.strip()}\n"
+    )
