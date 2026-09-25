@@ -69,6 +69,16 @@ def build_parser() -> argparse.ArgumentParser:
         default=str(ROOT_DIR / "tools" / "manifest.yaml"),
         help="Tool manifest path (relative or absolute).",
     )
+    parser.add_argument(
+        "--ask",
+        action="store_true",
+        help="Answer one grounded question on a completed round.",
+    )
+    parser.add_argument(
+        "--question",
+        default=None,
+        help="Question text for --ask (answered from stored evidence).",
+    )
     return parser
 
 
@@ -96,6 +106,18 @@ def main() -> None:
                 print(f"  ! {err}")
             failed = failed or not info["ok"]
         raise SystemExit(1 if failed else 0)
+    if args.ask:
+        if args.record is None or not args.question:
+            raise SystemExit("--ask requires --record <index> and "
+                             "--question <text>.")
+        from control.controller import ask, load_case
+
+        try:
+            state = load_case(args.record)
+        except FileNotFoundError as exc:
+            raise SystemExit(str(exc)) from exc
+        print(ask(state, args.question, agent_id=args.agent_id))
+        return
     prompt_path = resolve(args.prompt_file)
     tool_helper_path = resolve(args.tool_helper_file)
 
