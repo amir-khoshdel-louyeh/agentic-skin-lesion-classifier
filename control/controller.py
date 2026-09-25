@@ -95,3 +95,24 @@ def build_question_prompt(state: CaseState, question: str) -> str:
         f"--- AUDIT RECEIPTS ---\n{receipts or '(none)'}\n\n"
         f"Physician question: {question.strip()}\n"
     )
+
+
+def ask(state: CaseState, question: str, agent_id: str = "main") -> str:
+    """Answer one question in a FRESH short session grounded in `state`.
+
+    No context persists between calls — continuity comes from the stored
+    evidence, never from LLM memory. Returns answer text, or a clean
+    error string when the agent backend is unavailable.
+    """
+    from skin_agent import run_openclaw_cli  # lazy: CLI-only dependency
+
+    prompt = build_question_prompt(state, question)
+    try:
+        response = run_openclaw_cli(prompt, agent_id=agent_id,
+                                    show_command=False)
+    except Exception as exc:  # noqa: BLE001 - report to caller, don't crash
+        return f"Agent backend unavailable: {exc}"
+    if isinstance(response, dict) and response.get("payloads"):
+        return "\n".join(item.get("text", "")
+                         for item in response["payloads"])
+    return json.dumps(response, ensure_ascii=False)[:4000]
