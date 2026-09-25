@@ -17,8 +17,11 @@ if str(ROOT_DIR) not in sys.path:
 
 from agents.runner import run_agent
 from control.decide import append_audit, build_report, decide
+from control.guard import run_guard
 from control.manifest import load_manifest, render_for_agents
 from control.paths import resolve, startup_path_check
+from control.prompts import effective_thresholds
+from control.router import route, run_abcde
 from control.prompts import effective_thresholds
 from control.schemas import VerdictEnvelope
 
@@ -148,8 +151,16 @@ def run_round(
     manifest = load_manifest(resolve(tool_helper_file))
     manifest_text = render_for_agents(manifest)
 
+    # Phase 10 routing: deterministic evidence first. The guard never
+    # stops a round (reference images fail its blur bar); it only forces
+    # the full path with reasons. "screen" runs the triage worker alone.
+    guard = run_guard(str(record.get("image_path")))
+    abcde = run_abcde(str(record.get("image_path")))
+    route_info = route(guard, abcde)
+    roles = AGENT_ROLES if route_info["path"] == "full" else AGENT_ROLES[:1]
+
     verdicts = []
-    for extra in AGENT_ROLES:
+    for extra in roles:
         record_with_role = dict(record)
         record_with_role["role_extra"] = extra
         claimed = run_agent(record_with_role, manifest_text, agent_id=agent_id)
@@ -165,6 +176,10 @@ def run_round(
         "event": "round",
         "record_index": record_index,
         "image": record.get("image_path"),
+        "route": route_info,
+        "guard": {"passed": guard["passed"], "flags": guard["flags"]},
+        "abcde": {"risk_band": abcde["risk_band"],
+                  "score": abcde["score"]},
         "decision": decision["decision"],
         "reason": decision["reason"],
         "report": out.name,
