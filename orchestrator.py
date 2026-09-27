@@ -16,6 +16,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from agents.runner import run_agent
+from control.critic import run_critic
 from control.decide import append_audit, build_report, decide
 from control.guard import run_guard
 from control.manifest import load_manifest, render_for_agents
@@ -218,7 +219,20 @@ def run_round(
         if extra is not None:
             verdicts.append(extra)
 
-    decision = decide(verdicts, borderline_threshold=borderline_threshold)
+    # Critic runs on the full path only, after receipts: one advisory
+    # session that can only sustain an objection, never confirm.
+    critic_sustained, critic_reasons = False, []
+    if route_info["path"] == "full":
+        critic_sustained, critic_reasons = run_critic(
+            verdicts,
+            list(guard.get("flags", []))
+            + ([f"abcde:{abcde['risk_band']}"] if abcde.get("risk_band")
+               else []),
+            agent_id=agent_id,
+        )
+
+    decision = decide(verdicts, borderline_threshold=borderline_threshold,
+                      critic_objection=critic_sustained)
     report = build_report(record, verdicts, decision, thresholds=thresholds)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     out = ROOT_DIR / "report" / f"round_{record_index}_{stamp}.md"
@@ -233,6 +247,8 @@ def run_round(
         "guard": {"passed": guard["passed"], "flags": guard["flags"]},
         "abcde": {"risk_band": abcde["risk_band"],
                   "score": abcde["score"]},
+        "critic": {"sustained": critic_sustained,
+                   "reasons": critic_reasons},
         "decision": decision["decision"],
         "reason": decision["reason"],
         "report": out.name,
