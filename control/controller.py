@@ -116,3 +116,16 @@ def ask(state: CaseState, question: str, agent_id: str = "main") -> str:
         return "\n".join(item.get("text", "")
                          for item in response["payloads"])
     return json.dumps(response, ensure_ascii=False)[:4000]
+
+
+def redo(state: CaseState, agent_id: str = "main") -> tuple[CaseState, bool]:
+    """Re-run the round pipeline and reload evidence.
+
+    Deterministic tools return identical numbers, so the value is
+    re-verification: returns (fresh_state, decision_changed).
+    """
+    from orchestrator import run_round  # lazy: avoids import cycles
+
+    run_round(state.record_index, agent_id=agent_id)
+    fresh = load_case(state.record_index)
+    return fresh, fresh.decision != state.decision
