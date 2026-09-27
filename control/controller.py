@@ -129,3 +129,12 @@ def redo(state: CaseState, agent_id: str = "main") -> tuple[CaseState, bool]:
     run_round(state.record_index, agent_id=agent_id)
     fresh = load_case(state.record_index)
     return fresh, fresh.decision != state.decision
+
+
+def careful(state: CaseState, agent_id: str = "main") -> CaseState:
+    """Escalate to the careful route: one step tighter threshold plus a
+    control-side ensemble vote. Returns the fresh state."""
+    from orchestrator import run_round  # lazy: avoids import cycles
+
+    run_round(state.record_index, agent_id=agent_id, careful=True)
+    return load_case(state.record_index)
