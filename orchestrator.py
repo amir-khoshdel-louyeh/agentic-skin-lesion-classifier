@@ -132,6 +132,48 @@ def verify_receipt(
     return claimed
 
 
+def run_ensemble_verdict(record: dict, timeout: int = 600,
+                         ) -> VerdictEnvelope | None:
+    """Control-side ensemble vote for careful rounds: runs the high-tier
+    tool directly (no LLM) and wraps its JSON as a receipted verdict.
+    Returns None when the tool fails — never a guess."""
+    import json as _json
+    import subprocess as _subprocess
+
+    cmd = [sys.executable, str(resolve("tools/ensemble_high.py")),
+           "--image", str(resolve(str(record.get("image_path")))),
+           "--metadata", _json.dumps(record.get("metadata", {}))]
+    try:
+        proc = _subprocess.run(cmd, capture_output=True, text=True,
+                               timeout=timeout, cwd=str(ROOT_DIR))
+    except Exception:
+        return None
+    if proc.returncode != 0:
+        return None
+    try:
+        payload = _json.loads(proc.stdout)
+    except (ValueError, TypeError):
+        return None
+    if payload.get("status") != "success":
+        return None
+    try:
+        return VerdictEnvelope(
+            ran=True,
+            command=" ".join(cmd),
+            exit_code=0,
+            predicted_class=payload.get("disease_name"),
+            confidence=(None if payload.get("confidence_score") is None
+                        else float(payload["confidence_score"])),
+            reasoning="control-side ensemble vote (careful route)",
+            uncertainty_flags=[
+                f for f in (payload.get("uncertainty_flags") or [])
+                if f in ("borderline", "no_evidence", "tool_failed",
+                         "disagreement")],
+        )
+    except Exception:
+        return None
+
+
 def run_round(
     record_index: int,
     prompt_file: str = "prompt.yaml",
@@ -170,6 +212,11 @@ def run_round(
         record_with_role["role_extra"] = extra
         claimed = run_agent(record_with_role, manifest_text, agent_id=agent_id)
         verdicts.append(verify_receipt(claimed, record, manifest))
+
+    if careful:
+        extra = run_ensemble_verdict(record)
+        if extra is not None:
+            verdicts.append(extra)
 
     decision = decide(verdicts, borderline_threshold=borderline_threshold)
     report = build_report(record, verdicts, decision, thresholds=thresholds)
