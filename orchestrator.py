@@ -18,6 +18,7 @@ if str(ROOT_DIR) not in sys.path:
 from agents.runner import run_agent
 from control.critic import run_critic
 from control.decide import append_audit, build_report, decide
+from control.specialists import shortlist, specialist_brief
 from control.guard import run_guard
 from control.manifest import load_manifest, render_for_agents
 from control.paths import resolve, startup_path_check
@@ -230,6 +231,21 @@ def run_round(
                else []),
             agent_id=agent_id,
         )
+
+    # Specialists run on disagreement only: one advocate per shortlisted
+    # disease (max 2, sequential), same envelope schema and receipt
+    # verification as every other worker.
+    diseases = shortlist(verdicts) or []
+    specialist_verdicts = []
+    for disease in diseases:
+        record_with_role = dict(record)
+        record_with_role["role_extra"] = specialist_brief(disease,
+                                                          diseases)
+        claimed = run_agent(record_with_role, manifest_text,
+                            agent_id=agent_id)
+        specialist_verdicts.append(
+            verify_receipt(claimed, record, manifest))
+    verdicts.extend(specialist_verdicts)
 
     decision = decide(verdicts, borderline_threshold=borderline_threshold,
                       critic_objection=critic_sustained)
