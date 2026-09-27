@@ -26,17 +26,17 @@ def decide(
     critic_objection: bool = False,
 ) -> dict[str, object]:
     countable = [v for v in verdicts if v.is_countable()]
-    if critic_objection:
-        return {
-            "decision": "suspicious",
-            "reason": "sustained critic objection",
-            "verdicts_counted": len(countable),
-        }
     if not countable:
         return {
             "decision": "inconclusive",
             "reason": "no receipted verdicts",
             "verdicts_counted": 0,
+        }
+    if critic_objection:
+        return {
+            "decision": "suspicious",
+            "reason": "sustained critic objection",
+            "verdicts_counted": len(countable),
         }
     for v in countable:
         if v.predicted_class == MALIGNANT_CLASS and (v.confidence or 0.0) >= borderline_threshold:
