@@ -38,3 +38,52 @@ def build_critic_prompt(verdicts: list, flags: list[str]) -> str:
         + "\n\nReply with exactly one JSON object, no other text: "
         + CRITIC_SCHEMA
     )
+
+
+def parse_objection(raw: str, verdict_count: int) -> tuple[bool, list[str]]:
+    """Strict-parse a critic reply. Returns (sustained, reasons).
+
+    Fail-safe toward silence: anything invalid, uncited, or out of range
+    is NOT an objection. A broken critic must never force referrals by
+    itself — the calibrated verdicts already do that when unsure.
+    """
+    import re as _re
+
+    match = _re.search(r"\{.*\}", raw.strip(), _re.DOTALL)
+    if not match:
+        return False, ["no JSON object"]
+    try:
+        payload = json.loads(match.group(0))
+    except (ValueError, TypeError):
+        return False, ["malformed JSON"]
+    if not isinstance(payload, dict) or payload.get("objection") is not True:
+        return False, ["no objection raised"]
+    reasons = payload.get("reasons")
+    cites = payload.get("cites")
+    if not isinstance(reasons, list) or not reasons:
+        return False, ["objection without reasons"]
+    if not isinstance(cites, list) or not cites:
+        return False, ["objection without cites"]
+    for cite in cites:
+        nums = [int(n) for n in _re.findall(r"\d+", str(cite))]
+        if nums and not any(1 <= n <= verdict_count for n in nums):
+            return False, [f"cite out of range: {cite!r}"]
+    return True, [str(r)[:300] for r in reasons]
+
+
+def run_critic(verdicts: list, flags: list[str],
+               agent_id: str = "main") -> tuple[bool, list[str]]:
+    """Run one critic session. Never raises: backend failure = silence."""
+    from skin_agent import run_openclaw_cli  # lazy: CLI-only dependency
+
+    try:
+        response = run_openclaw_cli(build_critic_prompt(verdicts, flags),
+                                    agent_id=agent_id, show_command=False)
+    except Exception as exc:  # noqa: BLE001 - critic is advisory only
+        return False, [f"critic backend unavailable: {str(exc)[:150]}"]
+    if isinstance(response, dict) and response.get("payloads"):
+        raw = "\n".join(item.get("text", "")
+                        for item in response["payloads"])
+    else:
+        raw = json.dumps(response, ensure_ascii=False)
+    return parse_objection(raw, len(verdicts))
