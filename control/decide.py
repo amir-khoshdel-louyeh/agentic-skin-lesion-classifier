@@ -23,8 +23,15 @@ def decide(
     verdicts: list[VerdictEnvelope],
     weights: dict[int, float] | None = None,
     borderline_threshold: float = 0.75,
+    critic_objection: bool = False,
 ) -> dict[str, object]:
     countable = [v for v in verdicts if v.is_countable()]
+    if critic_objection:
+        return {
+            "decision": "suspicious",
+            "reason": "sustained critic objection",
+            "verdicts_counted": len(countable),
+        }
     if not countable:
         return {
             "decision": "inconclusive",
