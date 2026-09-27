@@ -79,6 +79,17 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Question text for --ask (answered from stored evidence).",
     )
+    parser.add_argument(
+        "--redo",
+        action="store_true",
+        help="Re-run a completed round and report decision changes.",
+    )
+    parser.add_argument(
+        "--careful",
+        action="store_true",
+        help="Re-run a round on the careful route (tighter threshold "
+        "plus control-side ensemble vote).",
+    )
     return parser
 
 
@@ -117,6 +128,24 @@ def main() -> None:
         except FileNotFoundError as exc:
             raise SystemExit(str(exc)) from exc
         print(ask(state, args.question, agent_id=args.agent_id))
+        return
+    if args.redo or args.careful:
+        if args.record is None:
+            raise SystemExit("--redo/--careful require --record <index>.")
+        from control.controller import careful, load_case, redo
+
+        try:
+            state = load_case(args.record)
+        except FileNotFoundError as exc:
+            raise SystemExit(str(exc)) from exc
+        if args.careful:
+            fresh = careful(state, agent_id=args.agent_id)
+            print(f"Careful round report: {fresh.report_name} "
+                  f"({fresh.decision})")
+        else:
+            fresh, changed = redo(state, agent_id=args.agent_id)
+            print(f"Round report: {fresh.report_name} ({fresh.decision})"
+                  + (" — DECISION CHANGED" if changed else " — unchanged"))
         return
     prompt_path = resolve(args.prompt_file)
     tool_helper_path = resolve(args.tool_helper_file)
