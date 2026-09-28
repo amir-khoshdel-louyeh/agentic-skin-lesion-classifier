@@ -1,7 +1,9 @@
-"""Physician debate grounding (proposal.tmp Sections 4/8).
+"""Physician debate grounding (proposal.tmp Sections 4/8, §8 fencing).
 
 Debate answers must come from stored evidence (round report + audit
-receipts), never from re-generated claims. This module builds the
+receipts), never from re-generated claims. Web skills (search/fetch) may
+be used in this chat layer ONLY as advisors under WEB_RULES: cited
+reference and explanation, never a vote change. This module builds the
 grounded context; full transcripts reload on demand only.
 """
 
@@ -9,6 +11,16 @@ import json
 from pathlib import Path
 
 from control.paths import ROOT_DIR
+
+WEB_RULES = (
+    "Web-search rules (fenced advisor, never a voter): "
+    "(1) web sources are reference and explanation only — current "
+    "guidelines, rare differentials; "
+    "(2) cite the source with every external claim; "
+    "(3) you have NO right to change the recorded decision — if a web "
+    "source contradicts a tool vote, report the contradiction explicitly "
+    "and the recorded vote stands."
+)
 
 
 def latest_report(record_index: int, root: Path = ROOT_DIR) -> Path | None:
@@ -48,6 +60,7 @@ def build_debate_prompt(record_index: int, root: Path = ROOT_DIR) -> str:
         "You are the orchestrator discussing a completed screening round "
         "with the physician. Answer ONLY from the evidence below. If a "
         "question goes beyond it, say so and name the missing evidence.\n\n"
+        f"{WEB_RULES}\n\n"
         f"--- ROUND REPORT ({report.name}) ---\n{report.read_text()}\n"
         f"--- AUDIT RECEIPTS ---\n{audit_lines or '(none)'}\n"
     )
