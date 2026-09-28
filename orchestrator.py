@@ -277,6 +277,8 @@ def run_round(
                   "score": abcde["score"]},
         "critic": {"sustained": critic_sustained,
                    "reasons": critic_reasons},
+        "specialists": {"shortlist": diseases,
+                        "counted": spec_classes},
         "decision": decision["decision"],
         "reason": decision["reason"],
         "report": out.name,
