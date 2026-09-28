@@ -31,11 +31,16 @@ ISIC_TO_CLASS = {
 
 VRAM_BUDGET_BYTES = 2 * 1024**3
 
-# Calibrated by temperature scaling: T=4.7 fitted by NLL grid search on a
-# 105-image ISIC2019_full split (15/class, SCC excluded, 2026-09-29).
-# Accuracy unchanged (argmax invariant); mean confidence 0.96 -> 0.54,
-# now tracking the ~0.57-0.69 empirical accuracy. NLL 3.92 -> 1.46.
-TEMPERATURE = 4.7
+FT_WEIGHTS = BASE_DIR / "models" / "derm-cnn-ft" / "skin_ft.pt"
+
+
+def resolve_weights() -> tuple[Path, str, float]:
+    """Prefer fine-tuned weights (held-out acc 0.65, mel-recall 0.76,
+    T=1.25, 2026-09-29); fall back to vendored model.pth (T=4.7) so
+    fresh clones without the git-ignored ft weights still run."""
+    if FT_WEIGHTS.exists():
+        return FT_WEIGHTS, "derm_cnn_ham10000_ft", 1.25
+    return (WEIGHTS_DIR / "model.pth"), "derm_cnn_ham10000", 4.7
 
 
 def fail(message: str) -> int:
@@ -61,8 +66,9 @@ def main() -> int:
     if not os.path.exists(args.image_path):
         print(json.dumps({"status": "error", "message": f"Image not found: {args.image_path}"}))
         return 1
-    if not (WEIGHTS_DIR / "model.pth").exists():
-        return fail(f"Fast-tier weights missing at: {WEIGHTS_DIR / 'model.pth'}")
+    weights, model_tag, temperature = resolve_weights()
+    if not weights.exists():
+        return fail(f"Fast-tier weights missing at: {weights}")
 
     metadata = {}
     if args.metadata:
@@ -89,14 +95,14 @@ def main() -> int:
     model = None
     try:
         arch = load_arch()
-        model, _ = arch.load_model(str(WEIGHTS_DIR / "model.pth"), device.type)
+        model, _ = arch.load_model(str(weights), device.type)
         image = ImageOps.exif_transpose(Image.open(args.image_path)).convert("RGB").resize((28, 28))
         pixels = list(image.get_flattened_data())
         inputs = torch.tensor(pixels, dtype=torch.float32).reshape(1, 28, 28, 3)
         inputs = inputs.permute(0, 3, 1, 2) / 255.0
         inputs = inputs.to(device)
         with torch.no_grad():
-            probs = torch.softmax(model(inputs) / TEMPERATURE, dim=1)[0]
+            probs = torch.softmax(model(inputs) / temperature, dim=1)[0]
             confidence, class_idx = torch.max(probs, dim=0)
         idx = int(class_idx.item())
         code = labels[str(idx)]
@@ -104,7 +110,7 @@ def main() -> int:
             "status": "success",
             "tool": "skin-lesion-fast",
             "model_tier": "tier1_fast",
-            "model_executed": "derm_cnn_ham10000",
+            "model_executed": model_tag,
             "predicted_class_index": idx,
             "disease_name": ISIC_TO_CLASS[code],
             "confidence_score": round(float(confidence.item()), 4),
