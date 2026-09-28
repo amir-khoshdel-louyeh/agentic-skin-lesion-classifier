@@ -249,6 +249,18 @@ def run_round(
 
     decision = decide(verdicts, borderline_threshold=borderline_threshold,
                       critic_objection=critic_sustained)
+    # Persistent specialist disagreement is named, never averaged away:
+    # two confident advocates for different diseases must refer.
+    spec_classes = sorted({
+        v.predicted_class for v in specialist_verdicts if v.is_countable()
+    })
+    if len(spec_classes) > 1:
+        decision = {
+            "decision": "suspicious",
+            "reason": (f"specialist dilemma: {spec_classes[0]} vs "
+                       f"{spec_classes[1]}"),
+            "verdicts_counted": sum(1 for v in verdicts if v.is_countable()),
+        }
     report = build_report(record, verdicts, decision, thresholds=thresholds)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     out = ROOT_DIR / "report" / f"round_{record_index}_{stamp}.md"
