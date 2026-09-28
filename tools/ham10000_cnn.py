@@ -34,7 +34,10 @@ VRAM_BUDGET_BYTES = 2 * 1024**3
 # Calibrated by temperature scaling: T=4.7 fitted by NLL grid search on a
 # 105-image ISIC2019_full split (15/class, SCC excluded, 2026-09-29).
 # Shared weights/arch with tools/skin_lesion_fast.py, hence the same T.
+# resolve_weights() prefers fine-tuned weights (held-out acc 0.65,
+# mel-recall 0.76, T=1.25) with fallback to vendored model.pth.
 TEMPERATURE = 4.7
+FT_TEMPERATURE = 1.25
 
 
 def fail(message: str) -> int:
@@ -95,15 +98,20 @@ def main() -> int:
     )
 
     labels = json.loads((WEIGHTS_DIR / "labels.json").read_text())
+    ft_weights = BASE_DIR / "models" / "derm-cnn-ft" / "skin_ft.pt"
+    if ft_weights.exists():
+        weights, model_tag, temperature = (
+            ft_weights, "derm_cnn_ham10000_ft", FT_TEMPERATURE)
+    else:
+        weights, model_tag, temperature = (
+            WEIGHTS_DIR / "model.pth", "derm_cnn_ham10000", TEMPERATURE)
     model = None
     try:
         arch = load_arch()
-        model, _ = arch.load_model(
-            str(WEIGHTS_DIR / "model.pth"), device.type
-        )
+        model, _ = arch.load_model(str(weights), device.type)
         inputs = preprocess(args.image_path, torch, device)
         with torch.no_grad():
-            probs = torch.softmax(model(inputs) / TEMPERATURE, dim=1)[0]
+            probs = torch.softmax(model(inputs) / temperature, dim=1)[0]
             confidence, class_idx = torch.max(probs, dim=0)
         idx = int(class_idx.item())
         code = labels[str(idx)]
@@ -111,7 +119,7 @@ def main() -> int:
             "status": "success",
             "tool": "ham10000-cnn",
             "model_tier": "tier1_fast",
-            "model_executed": "derm_cnn_ham10000",
+            "model_executed": model_tag,
             "predicted_class_index": idx,
             "disease_name": ISIC_TO_CLASS[code],
             "confidence_score": round(float(confidence.item()), 4),
