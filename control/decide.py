@@ -69,6 +69,7 @@ def build_report(
     verdicts: list[VerdictEnvelope],
     decision: dict,
     thresholds: dict[str, float] | None = None,
+    references: list[str] | None = None,
 ) -> str:
     lines = [
         "# Medical Screening Report (research use only)",
@@ -96,6 +97,14 @@ def build_report(
             f"- reasoning: {v.reasoning}",
             "",
         ]
+    lines += [
+        "## References",
+        "",
+    ]
+    if references:
+        lines += [f"- {ref}" for ref in references] + [""]
+    else:
+        lines += ["- Local tools only — no web sources consulted.", ""]
     lines += [
         "Coverage: 7 HAM10000 classes only — squamous cell carcinoma (SCC) "
         "and other conditions are out of coverage; flat uncertain cases "
