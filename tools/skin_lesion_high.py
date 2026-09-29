@@ -81,17 +81,22 @@ def load_mm_arch():
 
 
 def member_cnn(torch, device) -> dict[str, float]:
-    """Full 7-class distribution keyed by disease name (calibrated)."""
+    """Full 7-class distribution keyed by disease name (fine-tuned)."""
     import json as _json
 
     labels = _json.loads((CNN_DIR / "labels.json").read_text())
     arch = load_cnn_arch()
-    model, _ = arch.load_model(str(CNN_DIR / "model.pth"), device.type)
+    ft_weights = BASE_DIR / "models" / "derm-cnn-ft" / "skin_ft.pt"
+    if ft_weights.exists():
+        cnn_path, cnn_temp = str(ft_weights), 1.25
+    else:
+        cnn_path, cnn_temp = str(CNN_DIR / "model.pth"), CNN_TEMPERATURE
+    model, _ = arch.load_model(cnn_path, device.type)
     try:
         inputs = cnn_preprocess(IMAGE_PATH, torch, device)
         with torch.no_grad():
             probs = torch.softmax(
-                model(inputs) / CNN_TEMPERATURE, dim=1)[0]
+                model(inputs) / cnn_temp, dim=1)[0]
         return {ISIC_TO_CLASS[labels[str(i)]]: float(probs[i])
                 for i in range(len(labels))}
     finally:
