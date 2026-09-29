@@ -126,11 +126,22 @@ def verify_receipt(
             f"class corrected (agent said {claimed.predicted_class})",
             actual)
     actual_conf = actual.get("confidence_score")
-    if (claimed.confidence is not None and actual_conf is not None
-            and abs(float(actual_conf) - float(claimed.confidence)) > 1e-3):
-        return corrected(
-            f"confidence corrected (agent said {claimed.confidence})",
-            actual)
+    if claimed.confidence is not None and actual_conf is not None:
+        delta = abs(float(actual_conf) - float(claimed.confidence))
+        if delta <= 0.01:
+            pass  # rounding noise: trust the envelope as-is
+        elif delta <= 0.05:
+            return corrected(
+                f"confidence corrected (agent said {claimed.confidence})",
+                actual)
+        else:
+            # Not a rounding error: the agent did not read the tool
+            # output (observed: three isolated agents jointly reporting
+            # 0.89 for tool values near 0.71). A fabricated envelope is
+            # not evidence, even when its class happens to match.
+            return rejected(
+                f"confidence fabrication: agent said {claimed.confidence}, "
+                f"tool printed {actual_conf}")
     return claimed
 
 
