@@ -264,12 +264,19 @@ def run_round(
     abcde = run_abcde(str(record.get("image_path")))
     route_info = route(guard, abcde)
     preprocess_info: dict | None = None
-    if route_info["path"] == "screen":
+    if route_info["path"] == "screen" and not careful:
         # Phase 10 §10.2: router inputs include preprocess deltas. Probe
         # only screen candidates so the cheap path stays cheap; a dirty
         # cleaning delta upgrades to full.
         preprocess_info = probe_preprocess(str(record.get("image_path")))
         route_info = route(guard, abcde, preprocess_info)
+    if careful and route_info["path"] != "full":
+        # Phase 9.3 careful route: threshold + ensemble + FORCED full path
+        # so the critic pass below always runs. Logged as route change.
+        route_info = {"path": "full",
+                      "reasons": [*route_info.get("reasons", []),
+                                  "careful route forced full"],
+                      "forced_full": True}
     verdicts = []
     llm_sessions = 0
     if route_info["path"] == "screen" and not careful:
