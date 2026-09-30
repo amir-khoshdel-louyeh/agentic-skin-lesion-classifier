@@ -145,6 +145,52 @@ def verify_receipt(
     )
 
 
+def run_direct_tool(record: dict, tool_rel: str = "tools/ham10000_cnn.py",
+                      timeout: int = 600) -> VerdictEnvelope | None:
+    """Control-side direct tool run (Phase 10 screen path).
+
+    Clear cases skip LLM entirely: the triage tool runs deterministically
+    control-side and its JSON becomes a receipted verdict. Returns None
+    when the tool fails — never a guess.
+    """
+    import json as _json
+    import subprocess as _subprocess
+
+    cmd = [sys.executable, str(resolve(tool_rel)),
+           "--image", str(resolve(str(record.get("image_path"))))]
+    if tool_rel in ("tools/multimodal_fusion.py", "tools/ensemble_high.py"):
+        cmd += ["--metadata", _json.dumps(record.get("metadata", {}))]
+    try:
+        proc = _subprocess.run(cmd, capture_output=True, text=True,
+                               timeout=timeout, cwd=str(ROOT_DIR))
+    except Exception:
+        return None
+    if proc.returncode != 0:
+        return None
+    try:
+        payload = _json.loads(proc.stdout)
+    except (ValueError, TypeError):
+        return None
+    if payload.get("status") != "success":
+        return None
+    try:
+        return VerdictEnvelope(
+            ran=True,
+            command=" ".join(cmd),
+            exit_code=0,
+            predicted_class=payload.get("disease_name"),
+            confidence=(None if payload.get("confidence_score") is None
+                        else float(payload["confidence_score"])),
+            reasoning=f"control-side direct triage (screen path, {tool_rel})",
+            uncertainty_flags=[
+                f for f in (payload.get("uncertainty_flags") or [])
+                if f in ("borderline", "no_evidence", "tool_failed",
+                         "disagreement")],
+        )
+    except Exception:
+        return None
+
+
 def run_ensemble_verdict(record: dict, timeout: int = 600,
                          ) -> VerdictEnvelope | None:
     """Control-side ensemble vote for careful rounds: runs the high-tier
@@ -217,14 +263,23 @@ def run_round(
     guard = run_guard(str(record.get("image_path")))
     abcde = run_abcde(str(record.get("image_path")))
     route_info = route(guard, abcde)
-    roles = AGENT_ROLES if route_info["path"] == "full" else AGENT_ROLES[:1]
-
     verdicts = []
-    for extra in roles:
-        record_with_role = dict(record)
-        record_with_role["role_extra"] = extra
-        claimed = run_agent(record_with_role, manifest_text, agent_id=agent_id)
-        verdicts.append(verify_receipt(claimed, record, manifest))
+    llm_sessions = 0
+    if route_info["path"] == "screen" and not careful:
+        # Phase 10 acceptance: clear cases skip LLM entirely. Direct
+        # control-side triage; no agent session is spawned.
+        direct = run_direct_tool(record)
+        if direct is not None:
+            verdicts.append(direct)
+        route_info = {**route_info, "llm_skipped": True}
+    else:
+        roles = AGENT_ROLES if route_info["path"] == "full" else AGENT_ROLES[:1]
+        for extra in roles:
+            record_with_role = dict(record)
+            record_with_role["role_extra"] = extra
+            claimed = run_agent(record_with_role, manifest_text, agent_id=agent_id)
+            llm_sessions += 1
+            verdicts.append(verify_receipt(claimed, record, manifest))
 
     if careful:
         extra = run_ensemble_verdict(record)
@@ -283,6 +338,7 @@ def run_round(
         "image": record.get("image_path"),
         "careful": careful,
         "route": route_info,
+        "llm_sessions": llm_sessions + (1 if route_info.get("path") == "full" else 0) + len(specialist_verdicts),
         "guard": {"passed": guard["passed"], "flags": guard["flags"]},
         "abcde": {"risk_band": abcde["risk_band"],
                   "score": abcde["score"]},
