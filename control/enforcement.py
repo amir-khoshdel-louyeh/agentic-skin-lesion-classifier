@@ -21,8 +21,12 @@ Schema: {"ran": bool, "command": string, "exit_code": int|null, \
 "uncertainty_flags": subset of ["borderline","no_evidence",\
 "tool_failed","disagreement"]}.
 If you could not run a tool, set ran=false and explain in reasoning.
-Copy disease_name and confidence_score EXACTLY as the tool printed them;
-never round, adjust, or reinterpret them.
+Report the exact command you ran plus your reasoning in words.
+predicted_class and confidence are filled in control-side from
+re-execution: you MAY set them to null. If you report tool numbers,
+copy disease_name and confidence_score EXACTLY as the tool printed
+them; inventing numbers is the worst failure — omission is safe,
+fabrication is not.
 """ % (list(HAM10000_CLASSES),)
 
 _JSON_OBJECT_RE = re.compile(r"\{.*\}", re.DOTALL)
