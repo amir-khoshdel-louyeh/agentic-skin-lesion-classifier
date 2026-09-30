@@ -67,20 +67,6 @@ def verify_receipt(
             uncertainty_flags=["tool_failed"],
         )
 
-    def corrected(reason: str, actual: dict) -> VerdictEnvelope:
-        flags = list(dict.fromkeys(
-            list(claimed.uncertainty_flags) + ["disagreement"]))
-        return VerdictEnvelope(
-            ran=True,
-            command=claimed.command,
-            exit_code=0,
-            predicted_class=actual.get("disease_name"),
-            confidence=(None if actual.get("confidence_score") is None
-                        else float(actual["confidence_score"])),
-            reasoning=f"{claimed.reasoning} [control: {reason}]",
-            uncertainty_flags=flags,
-        )
-
     if not claimed.ran or claimed.exit_code != 0:
         return claimed
     try:
@@ -121,28 +107,42 @@ def verify_receipt(
         return rejected("re-execution produced no JSON")
     if actual.get("status") != "success":
         return rejected(f"tool reported: {actual.get('message')}")
-    if actual.get("disease_name") != claimed.predicted_class:
-        return corrected(
-            f"class corrected (agent said {claimed.predicted_class})",
-            actual)
+    # (No class-mismatch branch: the single-writer return below always
+    # carries the tool's own class; the agent's claim is only noted.)
     actual_conf = actual.get("confidence_score")
-    if claimed.confidence is not None and actual_conf is not None:
-        delta = abs(float(actual_conf) - float(claimed.confidence))
-        if delta <= 0.01:
-            pass  # rounding noise: trust the envelope as-is
-        elif delta <= 0.05:
-            return corrected(
-                f"confidence corrected (agent said {claimed.confidence})",
-                actual)
-        else:
-            # Not a rounding error: the agent did not read the tool
-            # output (observed: three isolated agents jointly reporting
-            # 0.89 for tool values near 0.71). A fabricated envelope is
-            # not evidence, even when its class happens to match.
-            return rejected(
-                f"confidence fabrication: agent said {claimed.confidence}, "
-                f"tool printed {actual_conf}")
-    return claimed
+    # Single-writer principle: numbers come ONLY from re-execution, never
+    # from agent text. The agent's numbers are kept as a reliability
+    # signal (exact/rounded/fabricated), but the verdict always carries
+    # the tool's own values — there is nothing left to fabricate.
+    claimed_conf = claimed.confidence
+    drift = (None if claimed_conf is None or actual_conf is None
+             else abs(float(actual_conf) - float(claimed_conf)))
+    if drift is None:
+        reliability = "omitted"
+    elif drift <= 0.01:
+        reliability = "exact"
+    elif drift <= 0.05:
+        reliability = "rounded"
+    else:
+        reliability = "fabricated"
+    flags = list(dict.fromkeys(
+        list(claimed.uncertainty_flags)
+        + (["disagreement"] if drift is not None and drift > 0.01 else [])))
+    note = (f"{claimed.reasoning} [control: agent said "
+            f"{claimed.predicted_class}/{claimed_conf}; "
+            f"reliability={reliability}]")
+    return VerdictEnvelope(
+        ran=True,
+        command=claimed.command,
+        exit_code=0,
+        predicted_class=actual.get("disease_name"),
+        confidence=(None if actual_conf is None
+                    else float(actual_conf)),
+        reasoning=note,
+        uncertainty_flags=[f for f in flags
+                           if f in ("borderline", "no_evidence",
+                                    "tool_failed", "disagreement")],
+    )
 
 
 def run_ensemble_verdict(record: dict, timeout: int = 600,
