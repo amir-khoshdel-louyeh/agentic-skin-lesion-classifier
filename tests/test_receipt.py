@@ -1,4 +1,8 @@
-"""Receipt tolerance bands (stdlib only, runs one cheap tool 3x)."""
+"""Receipt single-writer checks (stdlib only, runs one cheap tool 4x).
+
+Numbers always come from re-execution; agent drift only changes the
+reliability tag (exact/rounded/fabricated/omitted), never the verdict.
+"""
 import json
 import subprocess
 import sys
@@ -42,17 +46,29 @@ def envelope(confidence):
 
 
 exact = verify_receipt(envelope(conf), record, manifest)
-check("exact-accepted", exact.ran and "control" not in exact.reasoning)
+check("exact-keeps-tool-values",
+      exact.ran and exact.predicted_class == cls
+      and exact.confidence == conf and "reliability=exact" in exact.reasoning)
 
 small = verify_receipt(envelope(round(conf + 0.03, 4)), record, manifest)
-check("small-drift-corrected",
-      small.ran and "corrected" in small.reasoning
+check("small-drift-flagged-not-rejected",
+      small.ran and small.predicted_class == cls
+      and small.confidence == conf
+      and "reliability=rounded" in small.reasoning
       and "disagreement" in small.uncertainty_flags)
 
 big = verify_receipt(envelope(round(min(conf + 0.2, 1.0), 4)), record,
                      manifest)
-check("fabrication-rejected",
-      not big.ran and "fabrication" in big.reasoning)
+check("fabrication-yields-tool-values",
+      big.ran and big.predicted_class == cls and big.confidence == conf
+      and "reliability=fabricated" in big.reasoning
+      and "disagreement" in big.uncertainty_flags)
+
+omitted = verify_receipt(envelope(None), record, manifest)
+check("omitted-numbers-filled",
+      omitted.ran and omitted.predicted_class == cls
+      and omitted.confidence == conf
+      and "reliability=omitted" in omitted.reasoning)
 
 print(f"{len(failures)} failures")
 raise SystemExit(1 if failures else 0)
