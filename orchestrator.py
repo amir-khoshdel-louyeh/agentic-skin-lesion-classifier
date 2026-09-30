@@ -23,7 +23,7 @@ from control.guard import run_guard
 from control.manifest import load_manifest, render_for_agents
 from control.paths import resolve, startup_path_check
 from control.prompts import effective_thresholds
-from control.router import route, run_abcde
+from control.router import probe_preprocess, route, run_abcde
 from control.prompts import effective_thresholds
 from control.schemas import VerdictEnvelope
 
@@ -263,6 +263,13 @@ def run_round(
     guard = run_guard(str(record.get("image_path")))
     abcde = run_abcde(str(record.get("image_path")))
     route_info = route(guard, abcde)
+    preprocess_info: dict | None = None
+    if route_info["path"] == "screen":
+        # Phase 10 §10.2: router inputs include preprocess deltas. Probe
+        # only screen candidates so the cheap path stays cheap; a dirty
+        # cleaning delta upgrades to full.
+        preprocess_info = probe_preprocess(str(record.get("image_path")))
+        route_info = route(guard, abcde, preprocess_info)
     verdicts = []
     llm_sessions = 0
     if route_info["path"] == "screen" and not careful:
@@ -342,6 +349,7 @@ def run_round(
         "guard": {"passed": guard["passed"], "flags": guard["flags"]},
         "abcde": {"risk_band": abcde["risk_band"],
                   "score": abcde["score"]},
+        "preprocess": preprocess_info or {},
         "critic": {"sustained": critic_sustained,
                    "reasons": critic_reasons},
         "specialists": {"shortlist": diseases,
