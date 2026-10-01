@@ -21,23 +21,13 @@ from control.decide import append_audit, build_report, decide
 from control.specialists import shortlist, specialist_brief
 from control.guard import run_guard
 from control.brain import (MAX_SESSIONS, diagnostic_pool, receipt_summary,
-                       run_brain_step)
-from control.manifest import load_manifest, render_for_agents, render_subset
+                       run_brain_step, session_tools)
+from control.manifest import load_manifest, render_subset
 from control.paths import resolve, startup_path_check
 from control.prompts import effective_thresholds
 from control.quality import QUALITY_TOOLKIT, quality_line, run_quality
 from control.router import run_abcde
 from control.schemas import VerdictEnvelope
-
-AGENT_ROLES = (
-    "Triage role: use ONLY tools/ham10000_cnn.py with the case image. "
-    "Report its exact JSON output faithfully.",
-    "Fusion role: use ONLY tools/multimodal_fusion.py with the case image "
-    "and the case metadata JSON. Report its exact JSON output faithfully.",
-    "High-tier role: use ONLY tools/ensemble_high.py with the case image "
-    "and the case metadata JSON. Report its exact JSON output faithfully, "
-    "including entropy and uncertainty_flags.",
-)
 
 
 def load_record(prompt_file: Path, index: int) -> dict:
@@ -223,7 +213,12 @@ def run_round(
     prompt_path = resolve(prompt_file)
     record = load_record(prompt_path, record_index)
     manifest = load_manifest(resolve(tool_helper_file))
-    manifest_text = render_for_agents(manifest)
+    # plan.tmp §4: diagnostic sessions (§2.3) and specialists (§2.5) always
+    # see the same FULL diagnostic pool (VLM excluded). Support tools
+    # (quality_gate/preprocess/abcde) are skills ONLY for the Quality
+    # Agent (§2.1) and are hidden here.
+    pool_names = diagnostic_pool(manifest)
+    diag_manifest_text = render_subset(manifest, tuple(pool_names))
 
     import time as _time
     timings: dict[str, float] = {}
@@ -247,18 +242,18 @@ def run_round(
                               "full path always"],
                   "retired": True}
     preprocess_info: dict | None = None
-    # plan.tmp chain step 2 (T3): Brain-loop. The Brain (text-only, no
-    # tools, no images) writes one SHORT steer per session; code executes
-    # its orders verbatim, strictly sequentially for GPU. No
+    # plan.tmp chain step 2 (T3) + §2.3 thinkers (T4): Brain-loop over
+    # FULL-pool thinkers. Each session is a full thinker: case + Quality
+    # text + Brain's SHORT steer + FULL diagnostic pool, free choice of
+    # 1..n tools in any order. Isolated per session, then destroyed; it
+    # never sees other sessions directly, only via the steer note. Code
+    # executes Brain orders verbatim, strictly sequentially for GPU. No
     # `for i in range(3)` — the loop advances only on Brain orders, with
     # MAX_SESSIONS as a fail-safe cap, and stops early on Brain `stop`.
-    # NOTE (T4): sessions still carry their fixed AGENT_ROLES briefs plus
-    # the steer; the `use ONLY` restriction and FULL-pool freedom come in
-    # T4. The suggested_subset below is already hint-only (unenforced).
     quality_text = quality_line(quality)
-    pool_names = diagnostic_pool(manifest)
     verdicts: list = []
     steers: list[dict] = []
+    sessions_log: list[dict] = []
     brain_history: list[dict] = []
     llm_sessions = 0
     brain_sessions = 0
@@ -268,21 +263,27 @@ def run_round(
     brain_sessions += 1
     while True:
         steers.append({"session": len(verdicts) + 1, **order})
-        hint = (f"\nBrain steer (session {len(verdicts) + 1}): "
-                f"{order['steer']}\nSuggested subset is a HINT only, "
-                f"you may ignore it: {order['suggested_subset']}")
-        record_with_role = dict(record)
-        record_with_role["role_extra"] = (
-            AGENT_ROLES[len(verdicts)] + hint)
-        claimed = run_agent(record_with_role, manifest_text,
-                            agent_id=agent_id)
+        claimed = run_agent(dict(record), diag_manifest_text,
+                            agent_id=agent_id, quality_text=quality_text,
+                            steer=order["steer"],
+                            hint=order["suggested_subset"])
         llm_sessions += 1
         verified = verify_receipt(claimed, record, manifest)
         verdicts.append(verified)
         brain_history.append(receipt_summary(
             verified, len(verdicts),
-            tools=AGENT_ROLES[len(verdicts) - 1].split(":")[0]))
-        if len(verdicts) >= min(MAX_SESSIONS, len(AGENT_ROLES)):
+            tools=session_tools(verified.command)))
+        sessions_log.append({
+            "n": len(verdicts),
+            "steer": order["steer"],
+            "why": order["why"],
+            "suggested_subset": order["suggested_subset"],
+            "tools_run": session_tools(verified.command),
+            "command": verified.command,
+            "class": verified.predicted_class,
+            "confidence": verified.confidence,
+        })
+        if len(verdicts) >= MAX_SESSIONS:
             break
         order = run_brain_step(record, quality_text, brain_history,
                                pool_names, agent_id=agent_id)
@@ -315,8 +316,9 @@ def run_round(
     timings["critic_s"] = round(_time.perf_counter() - _t0, 2)
 
     # Specialists run on disagreement only: one advocate per shortlisted
-    # disease (max 2, sequential), same envelope schema and receipt
-    # verification as every other worker.
+    # disease (max 2, sequential), same FULL pool + envelope schema and
+    # receipt verification as every other worker. (NOTE T7: per-specialist
+    # Brain-written briefs replace specialist_brief() below.)
     _t0 = _time.perf_counter()
     diseases = shortlist(verdicts) or []
     specialist_verdicts = []
@@ -324,8 +326,8 @@ def run_round(
         record_with_role = dict(record)
         record_with_role["role_extra"] = specialist_brief(disease,
                                                           diseases)
-        claimed = run_agent(record_with_role, manifest_text,
-                            agent_id=agent_id)
+        claimed = run_agent(record_with_role, diag_manifest_text,
+                            agent_id=agent_id, quality_text=quality_text)
         verified = verify_receipt(claimed, record, manifest)
         # Phase 11 acceptance: off-shortlist classes never count. The tool
         # output is faithful, but a specialist confined to `disease` may not
@@ -370,6 +372,7 @@ def run_round(
         "quality": quality,
         "quality_text": quality_text,
         "steers": steers,
+        "sessions": sessions_log,
         "llm_sessions": (llm_sessions + 1 + brain_sessions + 1
                          + len(specialist_verdicts)),
         "timings": timings,

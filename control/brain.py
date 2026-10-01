@@ -154,6 +154,19 @@ def run_brain_step(record: dict, quality_text: str, history: list[dict],
     return parse_brain_order(raw, pool_names)
 
 
+def session_tools(command: str) -> str:
+    """Tool actually run, derived control-side from the verified command.
+
+    Tells the next steer what NOT to repeat. Unverifiable commands yield
+    "unknown" — never a guess from agent prose.
+    """
+    parts = (command or "").split()
+    if len(parts) >= 2 and parts[0] == "python" and parts[1].startswith(
+            "tools/") and parts[1].endswith(".py"):
+        return parts[1][len("tools/"):-len(".py")]
+    return "unknown"
+
+
 def receipt_summary(verdict, n: int, tools: str = "") -> dict:
     """Text-only receipt digest of one re-executed session for the Brain."""
     return {
