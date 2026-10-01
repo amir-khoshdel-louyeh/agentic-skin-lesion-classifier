@@ -18,7 +18,7 @@ class ClinicalMetadata(BaseModel):
     #category: str
 
 DEFAULT_PROMPT_FILE = Path("prompt.yaml")
-DEFAULT_TOOL_HELP_FILE = Path("tool_manifest.md")
+DEFAULT_TOOL_HELP_FILE = Path("tools/manifest.yaml")
 DEFAULT_OPENCLAW_PROMPT = textwrap.dedent(
     """
     You are an OpenClaw orchestrator for skin lesion analysis.

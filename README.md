@@ -39,7 +39,7 @@ benchmark, shared AK blind spot, 8B agents need receipt verification
 
 ![Structured Output](assets/system-demonstration.gif)
 
-### System Workflow
+### System Workflow (current: guard → router → screen/full)
 
 ```text
 Input image
@@ -48,22 +48,25 @@ Input image
 Prompt records in prompt.yaml
       │
       ▼
-OpenClaw agent via skin_agent.py
+Deterministic evidence first (no LLM):
+  quality-gate + abcde-analyzer + preprocess probe → router (screen/full)
       │
       ▼
-Tool selection:
-  - tools/skin_lesion_fast.py
-  - tools/skin_lesion_mid.py
-  - tools/skin_lesion_high.py
+screen (clear cases, NO LLM): control-side ham10000-cnn directly
+full (flagged cases): 3 isolated sessions via OpenClaw
+  - tools/ham10000_cnn.py (triage)
+  - tools/multimodal_fusion.py (image+metadata)
+  - tools/ensemble_high.py (CNN+fusion mean, entropy-gated)
+  + critic (rejection-only) + specialists (top-2 disagreement only)
       │
       ▼
-Model inference
+Receipt re-execution control-side (single-writer numbers)
       │
       ▼
 Structured JSON output
       │
       ▼
-Final Markdown report
+Final Markdown report in report/
 ```
 
 ### Agent Execution Demo

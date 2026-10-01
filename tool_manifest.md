@@ -1,4 +1,8 @@
-# Local Tool Command Helper & Manifest
+# Local Tool Command Helper & Manifest (LEGACY)
+> Canonical source is `tools/manifest.yaml`. This file is kept only for
+> backward compatibility with old prompts; new code defaults to the YAML
+> manifest. Voting tools are `ham10000_cnn` (triage), `multimodal-fusion`
+> (image+metadata), `ensemble-high` (CNN+fusion mean, entropy-gated).
 
 You have access to the following local CLI tools for skin lesion analysis. You must invoke them using exact absolute paths and forward slashes as defined below.
 
