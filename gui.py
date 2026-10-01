@@ -316,8 +316,10 @@ class App(tk.Tk):
                                "press Run.", font=TITLE_FONT, bg=GRAY_BG,
                                fg=MUTED, padx=12, pady=10, anchor=tk.W)
         self.banner.pack(fill=tk.X, padx=10, pady=(0, 6))
-        hint = ttk.Label(tab, text="Runs triage → fusion → high-tier agents "
-                         "sequentially (minutes). The decision banner above "
+        hint = ttk.Label(tab, text="Runs triage → fusion → high-tier tools "
+                         "sequentially (minutes). Screen path runs the "
+                         "triage tool directly with no agent session. The "
+                         "decision banner above "
                          "is the only thing that matters first.",
                          style="Muted.TLabel", wraplength=700,
                          justify=tk.LEFT)
@@ -658,7 +660,7 @@ class App(tk.Tk):
             return
         self.run_btn.configure(state=tk.DISABLED)
         self._set_busy(True, f"Running round {rec['_index']} — "
-                       "agents work sequentially, this takes minutes…")
+                       "tools run sequentially, this takes minutes…")
         self._run_thread(self._round_worker, rec["_index"])
 
     @staticmethod

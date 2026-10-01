@@ -85,12 +85,12 @@ def build_report(
         )
     lines += [
         "",
-        "## Agent verdicts",
+        "## Tool executions",
         "",
     ]
     for i, v in enumerate(verdicts):
         lines += [
-            f"### Agent {i + 1}",
+            f"### Tool execution {i + 1}",
             f"- ran: {v.ran}, exit: {v.exit_code}, command: `{v.command}`",
             f"- class: {v.predicted_class}, confidence: {v.confidence}",
             f"- flags: {', '.join(v.uncertainty_flags) or 'none'}",
