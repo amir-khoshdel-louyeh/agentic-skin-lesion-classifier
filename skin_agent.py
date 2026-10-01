@@ -145,6 +145,11 @@ def run_openclaw_cli(prompt: str, agent_id: str = "main", show_command: bool = T
             print("Command:", " ".join(command))
 
         try:
+            import os as _os
+            _env = dict(_os.environ)
+            # Sequential GPU schedule (§5): do not keep the agent LLM
+            # resident while PyTorch tools load. Best-effort only.
+            _env.setdefault("OLLAMA_KEEP_ALIVE", "0")
             result = subprocess.run(
                 command,
                 capture_output=True,
@@ -152,6 +157,7 @@ def run_openclaw_cli(prompt: str, agent_id: str = "main", show_command: bool = T
                 encoding="utf-8",
                 errors="replace",
                 timeout=1200,
+                env=_env,
             )
 
         except subprocess.TimeoutExpired as exc:

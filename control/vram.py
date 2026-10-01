@@ -13,6 +13,27 @@ except ImportError:  # torch missing: the tool itself reports that later
     _mem_info = None  # type: ignore[assignment]
 
 
+def unload_ollama(model: str = "qwen3:8b") -> bool:
+    """Best-effort Ollama unload for the sequential GPU schedule.
+
+    The LLM session must not hold VRAM while a >=1GB PyTorch tool loads.
+    `ollama stop` unloads one model; missing binary or errors return
+    False and never raise — callers treat this as advisory.
+    """
+    import shutil
+    import subprocess
+
+    binary = shutil.which("ollama")
+    if not binary:
+        return False
+    try:
+        proc = subprocess.run([binary, "stop", model],
+                              capture_output=True, text=True, timeout=60)
+        return proc.returncode == 0
+    except Exception:
+        return False
+
+
 def check(required_gb: float) -> tuple[bool, str]:
     """Return (ok, reason). `ok` False means do NOT load the model."""
     if _cuda_ok is None or not _cuda_ok():

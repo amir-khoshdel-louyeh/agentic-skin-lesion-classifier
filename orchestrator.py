@@ -59,6 +59,12 @@ def verify_receipt(
     import shlex
     import subprocess
 
+    try:
+        from control.vram import unload_ollama as _unload
+        _unload()
+    except Exception:
+        pass
+
     def rejected(reason: str) -> VerdictEnvelope:
         return VerdictEnvelope(
             ran=False,
@@ -156,6 +162,12 @@ def run_direct_tool(record: dict, tool_rel: str = "tools/ham10000_cnn.py",
     import json as _json
     import subprocess as _subprocess
 
+    try:
+        from control.vram import unload_ollama as _unload2
+        _unload2()
+    except Exception:
+        pass
+
     cmd = [sys.executable, str(resolve(tool_rel)),
            "--image", str(resolve(str(record.get("image_path"))))]
     if tool_rel in ("tools/multimodal_fusion.py", "tools/ensemble_high.py"):
@@ -198,6 +210,12 @@ def run_ensemble_verdict(record: dict, timeout: int = 600,
     Returns None when the tool fails — never a guess."""
     import json as _json
     import subprocess as _subprocess
+
+    try:
+        from control.vram import unload_ollama as _unload3
+        _unload3()
+    except Exception:
+        pass
 
     cmd = [sys.executable, str(resolve("tools/ensemble_high.py")),
            "--image", str(resolve(str(record.get("image_path")))),
