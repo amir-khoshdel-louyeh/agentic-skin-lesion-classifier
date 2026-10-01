@@ -25,6 +25,15 @@ def decide(
     borderline_threshold: float = 0.75,
     critic_objection: bool = False,
 ) -> dict[str, object]:
+    # plan.tmp T5: single-writer lock. ONLY re-executed VerdictEnvelopes
+    # may vote. Anything else (e.g. a Quality Agent dict, critic text,
+    # raw tool JSON) fails fast instead of silently counting — advisory
+    # voices never become votes by accident.
+    for v in verdicts:
+        if not isinstance(v, VerdictEnvelope):
+            raise TypeError(
+                f"decide() takes VerdictEnvelope only, got "
+                f"{type(v).__name__}: advisory output is never countable.")
     countable = [v for v in verdicts if v.is_countable()]
     if not countable:
         return {
