@@ -20,6 +20,8 @@ from control.critic import run_critic
 from control.decide import append_audit, build_report, decide
 from control.specialists import shortlist, specialist_brief
 from control.guard import run_guard
+from control.brain import (MAX_SESSIONS, diagnostic_pool, receipt_summary,
+                       run_brain_step)
 from control.manifest import load_manifest, render_for_agents, render_subset
 from control.paths import resolve, startup_path_check
 from control.prompts import effective_thresholds
@@ -245,15 +247,50 @@ def run_round(
                               "full path always"],
                   "retired": True}
     preprocess_info: dict | None = None
-    verdicts = []
+    # plan.tmp chain step 2 (T3): Brain-loop. The Brain (text-only, no
+    # tools, no images) writes one SHORT steer per session; code executes
+    # its orders verbatim, strictly sequentially for GPU. No
+    # `for i in range(3)` — the loop advances only on Brain orders, with
+    # MAX_SESSIONS as a fail-safe cap, and stops early on Brain `stop`.
+    # NOTE (T4): sessions still carry their fixed AGENT_ROLES briefs plus
+    # the steer; the `use ONLY` restriction and FULL-pool freedom come in
+    # T4. The suggested_subset below is already hint-only (unenforced).
+    quality_text = quality_line(quality)
+    pool_names = diagnostic_pool(manifest)
+    verdicts: list = []
+    steers: list[dict] = []
+    brain_history: list[dict] = []
     llm_sessions = 0
+    brain_sessions = 0
     _t0 = _time.perf_counter()
-    for extra in AGENT_ROLES:
+    order = run_brain_step(record, quality_text, brain_history, pool_names,
+                           agent_id=agent_id)
+    brain_sessions += 1
+    while True:
+        steers.append({"session": len(verdicts) + 1, **order})
+        hint = (f"\nBrain steer (session {len(verdicts) + 1}): "
+                f"{order['steer']}\nSuggested subset is a HINT only, "
+                f"you may ignore it: {order['suggested_subset']}")
         record_with_role = dict(record)
-        record_with_role["role_extra"] = extra
-        claimed = run_agent(record_with_role, manifest_text, agent_id=agent_id)
+        record_with_role["role_extra"] = (
+            AGENT_ROLES[len(verdicts)] + hint)
+        claimed = run_agent(record_with_role, manifest_text,
+                            agent_id=agent_id)
         llm_sessions += 1
-        verdicts.append(verify_receipt(claimed, record, manifest))
+        verified = verify_receipt(claimed, record, manifest)
+        verdicts.append(verified)
+        brain_history.append(receipt_summary(
+            verified, len(verdicts),
+            tools=AGENT_ROLES[len(verdicts) - 1].split(":")[0]))
+        if len(verdicts) >= min(MAX_SESSIONS, len(AGENT_ROLES)):
+            break
+        order = run_brain_step(record, quality_text, brain_history,
+                               pool_names, agent_id=agent_id)
+        brain_sessions += 1
+        if order.get("stop"):
+            steers.append({"session": len(verdicts) + 1, **order,
+                           "stopped": True})
+            break
     timings["workers_s"] = round(_time.perf_counter() - _t0, 2)
 
     _t0 = _time.perf_counter()
@@ -331,8 +368,10 @@ def run_round(
         "careful": careful,
         "route": route_info,
         "quality": quality,
-        "quality_text": quality_line(quality),
-        "llm_sessions": llm_sessions + 2 + len(specialist_verdicts),
+        "quality_text": quality_text,
+        "steers": steers,
+        "llm_sessions": (llm_sessions + 1 + brain_sessions + 1
+                         + len(specialist_verdicts)),
         "timings": timings,
         "guard": {"passed": guard["passed"], "flags": guard["flags"]},
         "abcde": {"risk_band": abcde["risk_band"],

@@ -60,7 +60,7 @@ _FORBIDDEN_RE = re.compile(
     re.IGNORECASE,
 )
 
-ROLES = ("orchestrator", "agent", "quality")
+ROLES = ("orchestrator", "agent", "quality", "brain")
 
 # Safety sentences that MUST survive in the locked layer. If a system file
 # was edited to drop one, loading fails fast.
@@ -76,6 +76,10 @@ LOCKED_SENTINELS: dict[str, tuple[str, ...]] = {
     "quality": (
         "never diagnoses",
         "never stops the round",
+    ),
+    "brain": (
+        "never see images",
+        "hint only",
     ),
 }
 
