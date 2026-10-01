@@ -275,18 +275,26 @@ def run_round(
     manifest = load_manifest(resolve(tool_helper_file))
     manifest_text = render_for_agents(manifest)
 
+    import time as _time
+    timings: dict[str, float] = {}
     # Phase 10 routing: deterministic evidence first. The guard never
     # stops a round (reference images fail its blur bar); it only forces
-    # the full path with reasons. "screen" runs the triage worker alone.
+    # the full path with reasons. "screen" runs the triage tool directly.
+    _t0 = _time.perf_counter()
     guard = run_guard(str(record.get("image_path")))
+    timings["guard_s"] = round(_time.perf_counter() - _t0, 2)
+    _t0 = _time.perf_counter()
     abcde = run_abcde(str(record.get("image_path")))
+    timings["abcde_s"] = round(_time.perf_counter() - _t0, 2)
     route_info = route(guard, abcde)
     preprocess_info: dict | None = None
     if route_info["path"] == "screen" and not careful:
         # Phase 10 §10.2: router inputs include preprocess deltas. Probe
         # only screen candidates so the cheap path stays cheap; a dirty
         # cleaning delta upgrades to full.
+        _t0 = _time.perf_counter()
         preprocess_info = probe_preprocess(str(record.get("image_path")))
+        timings["preprocess_probe_s"] = round(_time.perf_counter() - _t0, 2)
         route_info = route(guard, abcde, preprocess_info)
     if careful and route_info["path"] != "full":
         # Phase 9.3 careful route: threshold + ensemble + FORCED full path
@@ -297,6 +305,7 @@ def run_round(
                       "forced_full": True}
     verdicts = []
     llm_sessions = 0
+    _t0 = _time.perf_counter()
     if route_info["path"] == "screen" and not careful:
         # Phase 10 acceptance: clear cases skip LLM entirely. Direct
         # control-side triage; no agent session is spawned.
@@ -312,15 +321,19 @@ def run_round(
             claimed = run_agent(record_with_role, manifest_text, agent_id=agent_id)
             llm_sessions += 1
             verdicts.append(verify_receipt(claimed, record, manifest))
+    timings["workers_s"] = round(_time.perf_counter() - _t0, 2)
 
+    _t0 = _time.perf_counter()
     if careful:
         extra = run_ensemble_verdict(record)
         if extra is not None:
             verdicts.append(extra)
+    timings["careful_ensemble_s"] = round(_time.perf_counter() - _t0, 2)
 
     # Critic runs on the full path only, after receipts: one advisory
     # session that can only sustain an objection, never confirm.
     critic_sustained, critic_reasons = False, []
+    _t0 = _time.perf_counter()
     if route_info["path"] == "full":
         critic_sustained, critic_reasons = run_critic(
             verdicts,
@@ -329,10 +342,12 @@ def run_round(
                else []),
             agent_id=agent_id,
         )
+    timings["critic_s"] = round(_time.perf_counter() - _t0, 2)
 
     # Specialists run on disagreement only: one advocate per shortlisted
     # disease (max 2, sequential), same envelope schema and receipt
     # verification as every other worker.
+    _t0 = _time.perf_counter()
     diseases = shortlist(verdicts) or []
     specialist_verdicts = []
     for disease in diseases:
@@ -354,6 +369,7 @@ def run_round(
                 uncertainty_flags=["tool_failed"],
             )
         specialist_verdicts.append(verified)
+    timings["specialists_s"] = round(_time.perf_counter() - _t0, 2)
     verdicts.extend(specialist_verdicts)
 
     decision = decide(verdicts, borderline_threshold=borderline_threshold,
@@ -382,6 +398,7 @@ def run_round(
         "careful": careful,
         "route": route_info,
         "llm_sessions": llm_sessions + (1 if route_info.get("path") == "full" else 0) + len(specialist_verdicts),
+        "timings": timings,
         "guard": {"passed": guard["passed"], "flags": guard["flags"]},
         "abcde": {"risk_band": abcde["risk_band"],
                   "score": abcde["score"]},
