@@ -301,9 +301,12 @@ def run_round(
             verdicts.append(extra)
     timings["careful_ensemble_s"] = round(_time.perf_counter() - _t0, 2)
 
-    # Critic runs once per round, after receipts: one advisory session
-    # that can only sustain an objection, never confirm. (T1: always runs;
-    # the old `if path == full` gate is gone with routing.)
+    # Critic runs EXACTLY ONCE per round, post-loop only (plan.tmp T6):
+    # one advisory session that can only sustain an objection with cites,
+    # never confirm/clear/diagnose. Never per-session (judging incomplete
+    # evidence causes false objections). Toolkit: read-only receipts +
+    # Quality flags. Invalid output = silence (changes nothing); a
+    # sustained objection forces suspicious-refer in decide().
     critic_sustained, critic_reasons = False, []
     _t0 = _time.perf_counter()
     critic_sustained, critic_reasons = run_critic(
@@ -312,6 +315,7 @@ def run_round(
         + ([f"abcde:{abcde['risk_band']}"] if abcde.get("risk_band")
            else []),
         agent_id=agent_id,
+        quality_text=quality_text,
     )
     timings["critic_s"] = round(_time.perf_counter() - _t0, 2)
 

@@ -14,8 +14,13 @@ CRITIC_SCHEMA = (
 )
 
 
-def build_critic_prompt(verdicts: list, flags: list[str]) -> str:
-    """Prompt the critic with receipted verdicts + case flags."""
+def build_critic_prompt(verdicts: list, flags: list[str],
+                          quality_text: str = "") -> str:
+    """Prompt the critic with receipted verdicts + case flags + Quality.
+
+    Plan.tmp §2.4 toolkit: read-only receipts + Quality flags. The critic
+    sees re-executed numbers only, never agent prose claims.
+    """
     lines = []
     for i, v in enumerate(verdicts):
         lines.append(
@@ -24,15 +29,18 @@ def build_critic_prompt(verdicts: list, flags: list[str]) -> str:
             f"flags={','.join(v.uncertainty_flags) or 'none'}, "
             f"reasoning={v.reasoning[:300]}"
         )
+    quality_section = (f"Quality Agent (chain step 1): {quality_text}\n"
+                       if quality_text else "")
     return (
         "You are the safety critic of a skin-lesion screening round. "
         "Your ONLY job is to object to unsafe verdicts. You may NOT "
         "confirm, clear, or diagnose any case.\n\n"
         "Object (objection=true) ONLY if you can point to a concrete "
         "defect in the evidence below: a miscounted receipt, a confidence "
-        "below its threshold, an unflagged disagreement, or a case flag "
-        "the verdicts ignore. Each reason MUST cite the verdict number or "
-        "flag it relies on.\n\n"
+        "below its threshold, an unflagged disagreement, a Quality flag "
+        "the verdicts ignore, or a case flag the verdicts ignore. Each "
+        "reason MUST cite the verdict number or flag it relies on.\n\n"
+        f"{quality_section}"
         f"Case flags: {', '.join(flags) or 'none'}\n"
         + "\n".join(lines)
         + "\n\nReply with exactly one JSON object, no other text: "
@@ -72,13 +80,15 @@ def parse_objection(raw: str, verdict_count: int) -> tuple[bool, list[str]]:
 
 
 def run_critic(verdicts: list, flags: list[str],
-               agent_id: str = "main") -> tuple[bool, list[str]]:
+               agent_id: str = "main",
+               quality_text: str = "") -> tuple[bool, list[str]]:
     """Run one critic session. Never raises: backend failure = silence."""
     from skin_agent import run_openclaw_cli  # lazy: CLI-only dependency
 
     try:
-        response = run_openclaw_cli(build_critic_prompt(verdicts, flags),
-                                    agent_id=agent_id, show_command=False)
+        response = run_openclaw_cli(
+            build_critic_prompt(verdicts, flags, quality_text),
+            agent_id=agent_id, show_command=False)
     except Exception as exc:  # noqa: BLE001 - critic is advisory only
         return False, [f"critic backend unavailable: {str(exc)[:150]}"]
     if isinstance(response, dict) and response.get("payloads"):
