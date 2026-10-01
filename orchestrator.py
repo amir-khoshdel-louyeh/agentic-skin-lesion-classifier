@@ -20,9 +20,10 @@ from control.critic import run_critic
 from control.decide import append_audit, build_report, decide
 from control.specialists import shortlist, specialist_brief
 from control.guard import run_guard
-from control.manifest import load_manifest, render_for_agents
+from control.manifest import load_manifest, render_for_agents, render_subset
 from control.paths import resolve, startup_path_check
 from control.prompts import effective_thresholds
+from control.quality import QUALITY_TOOLKIT, quality_line, run_quality
 from control.router import run_abcde
 from control.schemas import VerdictEnvelope
 
@@ -224,12 +225,15 @@ def run_round(
 
     import time as _time
     timings: dict[str, float] = {}
-    # plan.tmp T1: deterministic routing RETIRED. No route()/screen shortcut.
-    # Guard + ABCDE remain as plain evidence (for critic flags + audit);
-    # they never decide a path. Every round runs the full worker set;
-    # the fast path will re-emerge from Brain early-stop (T3), not code.
-    # NOTE (T2): these control-side calls move into the Quality Agent
-    # (chain step 1); kept here only until T2 wires the agent.
+    # plan.tmp chain step 1 (T2): Quality Agent (LLM thinker) runs first.
+    # It decides pass|cleaned|flagged itself; it never aborts the round.
+    # Control-side guard + ABCDE below remain as plain evidence for the
+    # critic flags + audit (they never decide anything); the Quality
+    # verdict is the agent voice that T3 (Brain-loop) will steer on.
+    _t0 = _time.perf_counter()
+    quality = run_quality(record, render_subset(manifest, QUALITY_TOOLKIT),
+                          agent_id=agent_id)
+    timings["quality_s"] = round(_time.perf_counter() - _t0, 2)
     _t0 = _time.perf_counter()
     guard = run_guard(str(record.get("image_path")))
     timings["guard_s"] = round(_time.perf_counter() - _t0, 2)
@@ -326,7 +330,9 @@ def run_round(
         "image": record.get("image_path"),
         "careful": careful,
         "route": route_info,
-        "llm_sessions": llm_sessions + 1 + len(specialist_verdicts),
+        "quality": quality,
+        "quality_text": quality_line(quality),
+        "llm_sessions": llm_sessions + 2 + len(specialist_verdicts),
         "timings": timings,
         "guard": {"passed": guard["passed"], "flags": guard["flags"]},
         "abcde": {"risk_band": abcde["risk_band"],

@@ -77,3 +77,30 @@ def render_for_agents(manifest: Manifest) -> str:
             f"(needs: {', '.join(tool.requires) or 'nothing'})"
         )
     return "\n".join(lines)
+
+
+def render_subset(manifest: Manifest, names: tuple[str, ...]) -> str:
+    """Prompt-safe listing restricted to `names` (per-role toolkit).
+
+    Plan.tmp §4: sessions see only their installed skills. Ready tools
+    not in `names` are hidden. Unknown names raise KeyError so a
+    renamed manifest entry fails fast instead of silently narrowing
+    the toolkit.
+    """
+    wanted = set(names)
+    known = {t.name for t in manifest.tools}
+    unknown = wanted - known
+    if unknown:
+        raise KeyError(f"Unknown tools in subset: {sorted(unknown)}")
+    lines = ["Available tools (use EXACTLY these commands):", ""]
+    for tool in manifest.tools:
+        if tool.status != "ready" or tool.name not in wanted:
+            continue
+        usage = USAGE_BY_CATEGORY.get(
+            tool.category, "--image <path> [--metadata <json>]")
+        lines.append(
+            f"- {tool.name} [{tool.tier}]: "
+            f"`python {tool.command} {usage}` "
+            f"(needs: {', '.join(tool.requires) or 'nothing'})"
+        )
+    return "\n".join(lines)
