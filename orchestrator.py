@@ -323,8 +323,19 @@ def run_round(
                                                           diseases)
         claimed = run_agent(record_with_role, manifest_text,
                             agent_id=agent_id)
-        specialist_verdicts.append(
-            verify_receipt(claimed, record, manifest))
+        verified = verify_receipt(claimed, record, manifest)
+        # Phase 11 acceptance: off-shortlist classes never count. The tool
+        # output is faithful, but a specialist confined to `disease` may not
+        # introduce a third candidate — it becomes no-evidence.
+        if verified.is_countable() and verified.predicted_class != disease:
+            verified = VerdictEnvelope(
+                ran=False,
+                command=verified.command,
+                reasoning=(f"Specialist off-shortlist ({verified.predicted_class} "
+                           f"not in {diseases}) — recorded as no evidence."),
+                uncertainty_flags=["tool_failed"],
+            )
+        specialist_verdicts.append(verified)
     verdicts.extend(specialist_verdicts)
 
     decision = decide(verdicts, borderline_threshold=borderline_threshold,
