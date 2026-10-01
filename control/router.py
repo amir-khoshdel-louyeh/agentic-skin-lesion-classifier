@@ -1,8 +1,10 @@
-"""Flag router (Phase 10, no LLM).
+"""Tool wrappers for Quality Agent (plan.tmp T1 — decision logic RETIRED).
 
-Pure evidence in, route out: {"path": "screen"|"full", "reasons": [...]}.
-"screen" runs the triage worker only; "full" runs all three workers.
-Any doubt defaults to full — the router may only save work, never risk.
+`route()` decision logic is DELETED per plan.tmp §6/T1: no deterministic
+code may decide quality/route/tool/stop. What remains here are plain
+tool callers (ABCDE + preprocess probe) for the Quality Agent (chain
+step 1, §2.1) to invoke via its own LLM judgment. They return evidence,
+never a path.
 """
 
 from __future__ import annotations
@@ -12,9 +14,6 @@ import subprocess
 import sys
 
 from control.paths import ROOT_DIR, resolve
-
-SCREEN_FLAGS = ("screen",)
-FULL_FLAGS = ("full",)
 
 
 def run_abcde(image: str) -> dict:
@@ -80,31 +79,3 @@ def probe_preprocess(image: str, timeout: int = 300) -> dict:
     except Exception as exc:  # noqa: BLE001 - evidence, not crash
         return {"hair_pixels": 0, "improved": False,
                 "error": str(exc)[:200]}
-
-
-def route(guard: dict, abcde: dict, preprocess: dict | None = None) -> dict:
-    """Decide the worker path from deterministic evidence."""
-    reasons: list[str] = []
-    if not guard.get("passed"):
-        gflags = ",".join(guard.get("flags") or []) or "fail"
-        reasons.append(f"quality gate: {gflags}")
-    if "tool_failed" in guard.get("flags", []) + abcde.get("flags", []):
-        reasons.append("evidence tool failed")
-    band = abcde.get("risk_band", "")
-    if band in ("moderate", "high"):
-        reasons.append(f"abcde risk: {band} ({abcde.get('score')})")
-    if not band:
-        reasons.append("abcde risk unknown")
-    if preprocess:
-        if preprocess.get("error"):
-            reasons.append("preprocess probe failed")
-        else:
-            hair = int(preprocess.get("hair_pixels") or 0)
-            if hair >= 5000:
-                reasons.append(f"preprocess: hair {hair}px inpainted")
-            if preprocess.get("improved"):
-                reasons.append("preprocess: cleaning flips quality gate")
-    if reasons:
-        return {"path": "full", "reasons": reasons}
-    return {"path": "screen",
-            "reasons": [f"clean gate + abcde {band}"]}

@@ -23,8 +23,7 @@ from control.guard import run_guard
 from control.manifest import load_manifest, render_for_agents
 from control.paths import resolve, startup_path_check
 from control.prompts import effective_thresholds
-from control.router import probe_preprocess, route, run_abcde
-from control.prompts import effective_thresholds
+from control.router import run_abcde
 from control.schemas import VerdictEnvelope
 
 AGENT_ROLES = (
@@ -151,58 +150,6 @@ def verify_receipt(
     )
 
 
-def run_direct_tool(record: dict, tool_rel: str = "tools/ham10000_cnn.py",
-                      timeout: int = 600) -> VerdictEnvelope | None:
-    """Control-side direct tool run (Phase 10 screen path).
-
-    Clear cases skip LLM entirely: the triage tool runs deterministically
-    control-side and its JSON becomes a receipted verdict. Returns None
-    when the tool fails — never a guess.
-    """
-    import json as _json
-    import subprocess as _subprocess
-
-    try:
-        from control.vram import unload_ollama as _unload2
-        _unload2()
-    except Exception:
-        pass
-
-    cmd = [sys.executable, str(resolve(tool_rel)),
-           "--image", str(resolve(str(record.get("image_path"))))]
-    if tool_rel in ("tools/multimodal_fusion.py", "tools/ensemble_high.py"):
-        cmd += ["--metadata", _json.dumps(record.get("metadata", {}))]
-    try:
-        proc = _subprocess.run(cmd, capture_output=True, text=True,
-                               timeout=timeout, cwd=str(ROOT_DIR))
-    except Exception:
-        return None
-    if proc.returncode != 0:
-        return None
-    try:
-        payload = _json.loads(proc.stdout)
-    except (ValueError, TypeError):
-        return None
-    if payload.get("status") != "success":
-        return None
-    try:
-        return VerdictEnvelope(
-            ran=True,
-            command=" ".join(cmd),
-            exit_code=0,
-            predicted_class=payload.get("disease_name"),
-            confidence=(None if payload.get("confidence_score") is None
-                        else float(payload["confidence_score"])),
-            reasoning=f"control-side direct triage (screen path, {tool_rel})",
-            uncertainty_flags=[
-                f for f in (payload.get("uncertainty_flags") or [])
-                if f in ("borderline", "no_evidence", "tool_failed",
-                         "disagreement")],
-        )
-    except Exception:
-        return None
-
-
 def run_ensemble_verdict(record: dict, timeout: int = 600,
                          ) -> VerdictEnvelope | None:
     """Control-side ensemble vote for careful rounds: runs the high-tier
@@ -277,50 +224,32 @@ def run_round(
 
     import time as _time
     timings: dict[str, float] = {}
-    # Phase 10 routing: deterministic evidence first. The guard never
-    # stops a round (reference images fail its blur bar); it only forces
-    # the full path with reasons. "screen" runs the triage tool directly.
+    # plan.tmp T1: deterministic routing RETIRED. No route()/screen shortcut.
+    # Guard + ABCDE remain as plain evidence (for critic flags + audit);
+    # they never decide a path. Every round runs the full worker set;
+    # the fast path will re-emerge from Brain early-stop (T3), not code.
+    # NOTE (T2): these control-side calls move into the Quality Agent
+    # (chain step 1); kept here only until T2 wires the agent.
     _t0 = _time.perf_counter()
     guard = run_guard(str(record.get("image_path")))
     timings["guard_s"] = round(_time.perf_counter() - _t0, 2)
     _t0 = _time.perf_counter()
     abcde = run_abcde(str(record.get("image_path")))
     timings["abcde_s"] = round(_time.perf_counter() - _t0, 2)
-    route_info = route(guard, abcde)
+    route_info = {"path": "full",
+                  "reasons": ["deterministic routing retired (T1); "
+                              "full path always"],
+                  "retired": True}
     preprocess_info: dict | None = None
-    if route_info["path"] == "screen" and not careful:
-        # Phase 10 §10.2: router inputs include preprocess deltas. Probe
-        # only screen candidates so the cheap path stays cheap; a dirty
-        # cleaning delta upgrades to full.
-        _t0 = _time.perf_counter()
-        preprocess_info = probe_preprocess(str(record.get("image_path")))
-        timings["preprocess_probe_s"] = round(_time.perf_counter() - _t0, 2)
-        route_info = route(guard, abcde, preprocess_info)
-    if careful and route_info["path"] != "full":
-        # Phase 9.3 careful route: threshold + ensemble + FORCED full path
-        # so the critic pass below always runs. Logged as route change.
-        route_info = {"path": "full",
-                      "reasons": [*route_info.get("reasons", []),
-                                  "careful route forced full"],
-                      "forced_full": True}
     verdicts = []
     llm_sessions = 0
     _t0 = _time.perf_counter()
-    if route_info["path"] == "screen" and not careful:
-        # Phase 10 acceptance: clear cases skip LLM entirely. Direct
-        # control-side triage; no agent session is spawned.
-        direct = run_direct_tool(record)
-        if direct is not None:
-            verdicts.append(direct)
-        route_info = {**route_info, "llm_skipped": True}
-    else:
-        roles = AGENT_ROLES if route_info["path"] == "full" else AGENT_ROLES[:1]
-        for extra in roles:
-            record_with_role = dict(record)
-            record_with_role["role_extra"] = extra
-            claimed = run_agent(record_with_role, manifest_text, agent_id=agent_id)
-            llm_sessions += 1
-            verdicts.append(verify_receipt(claimed, record, manifest))
+    for extra in AGENT_ROLES:
+        record_with_role = dict(record)
+        record_with_role["role_extra"] = extra
+        claimed = run_agent(record_with_role, manifest_text, agent_id=agent_id)
+        llm_sessions += 1
+        verdicts.append(verify_receipt(claimed, record, manifest))
     timings["workers_s"] = round(_time.perf_counter() - _t0, 2)
 
     _t0 = _time.perf_counter()
@@ -330,18 +259,18 @@ def run_round(
             verdicts.append(extra)
     timings["careful_ensemble_s"] = round(_time.perf_counter() - _t0, 2)
 
-    # Critic runs on the full path only, after receipts: one advisory
-    # session that can only sustain an objection, never confirm.
+    # Critic runs once per round, after receipts: one advisory session
+    # that can only sustain an objection, never confirm. (T1: always runs;
+    # the old `if path == full` gate is gone with routing.)
     critic_sustained, critic_reasons = False, []
     _t0 = _time.perf_counter()
-    if route_info["path"] == "full":
-        critic_sustained, critic_reasons = run_critic(
-            verdicts,
-            list(guard.get("flags", []))
-            + ([f"abcde:{abcde['risk_band']}"] if abcde.get("risk_band")
-               else []),
-            agent_id=agent_id,
-        )
+    critic_sustained, critic_reasons = run_critic(
+        verdicts,
+        list(guard.get("flags", []))
+        + ([f"abcde:{abcde['risk_band']}"] if abcde.get("risk_band")
+           else []),
+        agent_id=agent_id,
+    )
     timings["critic_s"] = round(_time.perf_counter() - _t0, 2)
 
     # Specialists run on disagreement only: one advocate per shortlisted
@@ -397,7 +326,7 @@ def run_round(
         "image": record.get("image_path"),
         "careful": careful,
         "route": route_info,
-        "llm_sessions": llm_sessions + (1 if route_info.get("path") == "full" else 0) + len(specialist_verdicts),
+        "llm_sessions": llm_sessions + 1 + len(specialist_verdicts),
         "timings": timings,
         "guard": {"passed": guard["passed"], "flags": guard["flags"]},
         "abcde": {"risk_band": abcde["risk_band"],
