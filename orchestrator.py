@@ -17,7 +17,8 @@ if str(ROOT_DIR) not in sys.path:
 
 from agents.runner import run_agent
 from control.critic import run_critic
-from control.decide import append_audit, build_report, decide
+from control.decide import (RULE_DILEMMA, append_audit, build_report, decide,
+                       reliability_of)
 from control.specialists import advocate_brief, shortlist
 from control.guard import run_guard
 from control.brain import (MAX_SESSIONS, diagnostic_pool, receipt_summary,
@@ -283,6 +284,8 @@ def run_round(
             "command": verified.command,
             "class": verified.predicted_class,
             "confidence": verified.confidence,
+            "reliability": reliability_of(verified.reasoning),
+            "reasoning": verified.reasoning,
         })
         if len(verdicts) >= MAX_SESSIONS:
             break
@@ -368,9 +371,20 @@ def run_round(
             "decision": "suspicious",
             "reason": (f"specialist dilemma: {spec_classes[0]} vs "
                        f"{spec_classes[1]}"),
+            "rule": RULE_DILEMMA,
             "verdicts_counted": sum(1 for v in verdicts if v.is_countable()),
         }
-    report = build_report(record, verdicts, decision, thresholds=thresholds)
+    specialist_texts = [
+        {"disease": v.predicted_class, "reasoning": v.reasoning}
+        for v in specialist_verdicts if v.is_countable()
+    ]
+    report = build_report(
+        record, verdicts, decision, thresholds=thresholds,
+        quality=quality, steers=steers, sessions=sessions_log,
+        critic={"sustained": critic_sustained,
+                "reasons": critic_reasons},
+        specialist_texts=specialist_texts,
+    )
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     out = ROOT_DIR / "report" / f"round_{record_index}_{stamp}.md"
     out.parent.mkdir(parents=True, exist_ok=True)

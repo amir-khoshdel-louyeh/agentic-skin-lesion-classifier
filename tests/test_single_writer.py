@@ -58,8 +58,10 @@ for tag in ("exact", "rounded", "fabricated", "omitted"):
 check("reliability-never-gates",
       len(decisions) == 1 and next(iter(decisions))[0] == "benign",
       str(decisions))
-decide_text = (ROOT / "control" / "decide.py").read_text(encoding="utf-8")
-check("decide-ignores-reliability", "reliability" not in decide_text)
+decide_src = (ROOT / "control" / "decide.py").read_text(encoding="utf-8")
+decide_body = decide_src.split("def decide(")[1].split("\ndef ")[0]
+check("decide-ignores-reliability", "reliability" not in decide_body,
+      "decide() reads the informational tag")
 
 # 3. Wiring: every agent claim flows through verify_receipt before it
 # can vote; quality never enters the verdict list.
