@@ -18,10 +18,11 @@ if str(ROOT_DIR) not in sys.path:
 from agents.runner import run_agent
 from control.critic import run_critic
 from control.decide import append_audit, build_report, decide
-from control.specialists import shortlist, specialist_brief
+from control.specialists import advocate_brief, shortlist
 from control.guard import run_guard
 from control.brain import (MAX_SESSIONS, diagnostic_pool, receipt_summary,
-                       run_brain_step, session_tools)
+                       run_brain_step, run_specialist_briefs,
+                       session_tools)
 from control.manifest import load_manifest, render_subset
 from control.paths import resolve, startup_path_check
 from control.prompts import effective_thresholds
@@ -319,17 +320,24 @@ def run_round(
     )
     timings["critic_s"] = round(_time.perf_counter() - _t0, 2)
 
-    # Specialists run on disagreement only: one advocate per shortlisted
-    # disease (max 2, sequential), same FULL pool + envelope schema and
-    # receipt verification as every other worker. (NOTE T7: per-specialist
-    # Brain-written briefs replace specialist_brief() below.)
+    # Specialists run on disagreement only (plan.tmp T7): the trigger is
+    # code counting (≥2 distinct countable classes, top-2 by re-executed
+    # confidence) — counting, not diagnosis, so it stays in code. Each
+    # advocate gets a DIFFERENT Brain-written angle for its disease (same
+    # FULL pool + envelope schema + receipt verification as every worker).
+    # A Brain failure falls back to the static template (audit-logged);
+    # the advocate sessions still run.
     _t0 = _time.perf_counter()
     diseases = shortlist(verdicts) or []
+    briefs, brief_source = ({}, "none")
+    if diseases:
+        briefs, brief_source = run_specialist_briefs(
+            diseases, brain_history, quality_text, agent_id=agent_id)
     specialist_verdicts = []
     for disease in diseases:
         record_with_role = dict(record)
-        record_with_role["role_extra"] = specialist_brief(disease,
-                                                          diseases)
+        record_with_role["role_extra"] = advocate_brief(
+            disease, diseases, briefs[disease])
         claimed = run_agent(record_with_role, diag_manifest_text,
                             agent_id=agent_id, quality_text=quality_text)
         verified = verify_receipt(claimed, record, manifest)
@@ -387,7 +395,9 @@ def run_round(
         "critic": {"sustained": critic_sustained,
                    "reasons": critic_reasons},
         "specialists": {"shortlist": diseases,
-                        "counted": spec_classes},
+                         "brief_source": brief_source,
+                         "briefs": briefs,
+                         "counted": spec_classes},
         "decision": decision["decision"],
         "reason": decision["reason"],
         "report": out.name,

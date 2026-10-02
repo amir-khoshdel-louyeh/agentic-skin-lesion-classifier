@@ -167,6 +167,114 @@ def session_tools(command: str) -> str:
     return "unknown"
 
 
+SPECIALIST_BRIEFS_SCHEMA = (
+    '{"briefs": [{"disease": string, "angle": string}]}'
+)
+
+
+def build_specialist_briefs_prompt(diseases: list[str],
+                                   history: list[dict],
+                                   quality_text: str,
+                                   role_text: str) -> str:
+    """Ask the Brain for one advocate angle per shortlisted disease."""
+    receipts = "\n".join(
+        f"Session {h['n']}: class={h['class']}, "
+        f"confidence={h['confidence']}, "
+        f"flags={h['flags'] or 'none'}, "
+        f"reasoning={h['reasoning'][:250]}"
+        for h in history
+    )
+    return (
+        f"{role_text}\n"
+        f"Two diseases are under debate: "
+        f"{' vs '.join(diseases)}.\n"
+        f"Quality Agent: {quality_text}\n"
+        f"Re-executed receipts:\n{receipts or '(none)'}\n\n"
+        "Write ONE short advocate angle per disease (a DIFFERENT angle "
+        "per disease: what would speak FOR it, what to stress, what to "
+        "verify). Angles steer advocates; they never decide anything.\n\n"
+        "Reply with exactly one JSON object, no other text: "
+        + SPECIALIST_BRIEFS_SCHEMA
+    )
+
+
+def parse_specialist_briefs(raw: str,
+                            diseases: list[str]) -> dict[str, str] | None:
+    """Parse Brain-written advocate angles. Returns None on any defect.
+
+    The briefs must cover EXACTLY the shortlisted diseases (one non-empty
+    angle each) — a partial or off-shortlist set is unusable. None means
+    "fall back to the static template"; the advocate sessions still run.
+    """
+    match = _re.search(r"\{.*\}", (raw or "").strip(), _re.DOTALL)
+    if not match:
+        return None
+    try:
+        payload = json.loads(match.group(0))
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    briefs = payload.get("briefs")
+    if not isinstance(briefs, list):
+        return None
+    angles: dict[str, str] = {}
+    for item in briefs:
+        if not isinstance(item, dict):
+            return None
+        disease, angle = item.get("disease"), item.get("angle")
+        if not isinstance(disease, str) or not isinstance(angle, str):
+            return None
+        if disease in angles or not angle.strip():
+            return None
+        angles[disease] = angle.strip()[:800]
+    if set(angles) != set(diseases):
+        return None
+    return angles
+
+
+def run_specialist_briefs(diseases: list[str], history: list[dict],
+                          quality_text: str,
+                          agent_id: str = "main"
+                          ) -> tuple[dict[str, str], str]:
+    """Brain-written angle per shortlisted disease. Never raises.
+
+    Returns (briefs, source) with source "brain" or "fallback". On invalid
+    Brain output or backend failure the static template fills in — the
+    advocate sessions still run; the fallback is audit-logged.
+    """
+    from control.specialists import specialist_brief  # lazy: template owner
+
+    def fallback() -> tuple[dict[str, str], str]:
+        return ({d: specialist_brief(d, diseases) for d in diseases},
+                "fallback")
+
+    from control.prompts import load_role  # lazy: file layout dependency
+
+    try:
+        role_text = load_role("brain")
+    except Exception:  # noqa: BLE001 - fallback, don't crash
+        return fallback()
+    from skin_agent import run_openclaw_cli  # lazy: CLI-only dependency
+
+    try:
+        response = run_openclaw_cli(
+            build_specialist_briefs_prompt(diseases, history, quality_text,
+                                           role_text),
+            agent_id=agent_id, show_command=False)
+    except Exception:  # noqa: BLE001 - fallback, don't crash
+        return fallback()
+    if isinstance(response, dict) and response.get("payloads"):
+        raw = "\n".join(item.get("text", "")
+                         for item in response["payloads"])
+    else:
+        raw = json.dumps(response, ensure_ascii=False)
+    angles = parse_specialist_briefs(raw, diseases)
+    if angles is None:
+        return fallback()
+    return angles, "brain"
+
+
 def receipt_summary(verdict, n: int, tools: str = "") -> dict:
     """Text-only receipt digest of one re-executed session for the Brain."""
     return {

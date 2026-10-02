@@ -30,7 +30,12 @@ def shortlist(verdicts: list, limit: int = 2) -> list[str] | None:
 
 
 def specialist_brief(disease: str, shortlisted: list[str]) -> str:
-    """Role assignment: advocate ONLY for `disease`."""
+    """Role assignment: advocate ONLY for `disease`.
+
+    Static fallback template (plan.tmp T7): used only when the Brain
+    cannot write angles. The preferred path is advocate_brief() with a
+    Brain-written angle.
+    """
     others = ", ".join(c for c in shortlisted if c != disease) or "none"
     return (
         f"Specialist role: advocate ONLY for {disease}. Use any ONE ready "
@@ -40,3 +45,11 @@ def specialist_brief(disease: str, shortlisted: list[str]) -> str:
         f"output says otherwise — report the tool output faithfully, "
         f"never fabricate it. Cite the receipt command and numbers."
     )
+
+
+def advocate_brief(disease: str, shortlisted: list[str],
+                   angle: str) -> str:
+    """Advocate assignment with a Brain-written angle (plan.tmp T7)."""
+    return specialist_brief(disease, shortlisted) + (
+        f" Brain angle for your advocacy (steering only, verify it "
+        f"yourself): {angle}")
