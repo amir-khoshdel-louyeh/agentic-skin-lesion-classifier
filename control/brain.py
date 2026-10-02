@@ -151,6 +151,11 @@ def run_brain_step(record: dict, quality_text: str, history: list[dict],
                          for item in response["payloads"])
     else:
         raw = json.dumps(response, ensure_ascii=False)
+    try:
+        from control.vram import unload_ollama as _unload
+        _unload()  # sequential GPU: free LLM VRAM before tool phases
+    except Exception:
+        pass
     return parse_brain_order(raw, pool_names)
 
 
@@ -269,6 +274,11 @@ def run_specialist_briefs(diseases: list[str], history: list[dict],
                          for item in response["payloads"])
     else:
         raw = json.dumps(response, ensure_ascii=False)
+    try:
+        from control.vram import unload_ollama as _unload2
+        _unload2()  # sequential GPU: free LLM VRAM before tool phases
+    except Exception:
+        pass
     angles = parse_specialist_briefs(raw, diseases)
     if angles is None:
         return fallback()

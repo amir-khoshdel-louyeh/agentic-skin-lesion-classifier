@@ -18,6 +18,11 @@ from control.paths import ROOT_DIR, resolve
 
 def run_guard(image: str) -> dict:
     """Return {passed, metrics, flags, error}. Never raises."""
+    try:
+        from control.vram import unload_ollama as _unload
+        _unload()  # sequential GPU: LLM out before any tool loads
+    except Exception:
+        pass
     cmd = [sys.executable, str(resolve("tools/quality_gate.py")),
            "--image", str(resolve(image))]
     try:

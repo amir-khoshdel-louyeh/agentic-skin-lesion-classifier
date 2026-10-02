@@ -28,6 +28,15 @@ from control.schemas import VerdictEnvelope
 from skin_agent import run_openclaw_cli
 
 
+def _release_llm() -> None:
+    """Best-effort LLM unload after a session (sequential GPU)."""
+    try:
+        from control.vram import unload_ollama as _unload
+        _unload()
+    except Exception:
+        pass
+
+
 def build_agent_prompt(
     record: dict,
     manifest_text: str,
@@ -81,6 +90,7 @@ def run_agent(
                                 steer=steer, hint=hint)
     try:
         raw = extract_text(run_openclaw_cli(prompt, agent_id=agent_id))
+        _release_llm()
     except Exception as exc:
         return VerdictEnvelope(
             ran=False,
@@ -98,6 +108,7 @@ def run_agent(
                     agent_id=agent_id,
                 )
             )
+            _release_llm()
             return parse_envelope(retry_raw)
         except (EnvelopeError, Exception) as exc:
             return VerdictEnvelope(

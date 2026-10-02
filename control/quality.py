@@ -137,6 +137,11 @@ def run_quality(record: dict, toolkit_text: str,
                          for item in response["payloads"])
     else:
         raw = json.dumps(response, ensure_ascii=False)
+    try:
+        from control.vram import unload_ollama as _unload
+        _unload()  # sequential GPU: free LLM VRAM before tool phases
+    except Exception:
+        pass
     return parse_quality(raw)
 
 

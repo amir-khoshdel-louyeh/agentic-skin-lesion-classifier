@@ -18,6 +18,11 @@ from control.paths import ROOT_DIR, resolve
 
 def run_abcde(image: str) -> dict:
     """Return {risk_band, score, flags, error}. Never raises."""
+    try:
+        from control.vram import unload_ollama as _unload
+        _unload()  # sequential GPU: LLM out before any tool loads
+    except Exception:
+        pass
     cmd = [sys.executable, str(resolve("tools/abcde_analyzer.py")),
            "--image", str(resolve(image))]
     try:
@@ -52,6 +57,11 @@ def probe_preprocess(image: str, timeout: int = 300) -> dict:
     import tempfile
     from pathlib import Path as _Path
 
+    try:
+        from control.vram import unload_ollama as _unload2
+        _unload2()  # sequential GPU: LLM out before any tool loads
+    except Exception:
+        pass
     try:
         with tempfile.TemporaryDirectory(prefix="preprobe_") as tmp:
             out = str(_Path(tmp) / "cleaned.jpg")
