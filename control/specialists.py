@@ -53,3 +53,24 @@ def advocate_brief(disease: str, shortlisted: list[str],
     return specialist_brief(disease, shortlisted) + (
         f" Brain angle for your advocacy (steering only, verify it "
         f"yourself): {angle}")
+
+
+def confine_specialist(verified, disease: str,
+                       shortlisted: list[str]):
+    """Off-shortlist filter (plan.tmp T7/T11, counting only).
+
+    A specialist confined to `disease` may not introduce a third
+    candidate: an off-shortlist countable class becomes no-evidence
+    (ran=False). On-shortlist verdicts pass through untouched.
+    """
+    from control.schemas import VerdictEnvelope  # lazy: schema owner
+
+    if verified.is_countable() and verified.predicted_class != disease:
+        return VerdictEnvelope(
+            ran=False,
+            command=verified.command,
+            reasoning=(f"Specialist off-shortlist ({verified.predicted_class} "
+                       f"not in {shortlisted}) — recorded as no evidence."),
+            uncertainty_flags=["tool_failed"],
+        )
+    return verified

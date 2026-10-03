@@ -124,7 +124,7 @@ if skill.exists():
 orch_text = (ROOT / "orchestrator.py").read_text(encoding="utf-8")
 check("orchestrator-brain-briefs", "run_specialist_briefs(" in orch_text)
 check("orchestrator-advocate-brief", "advocate_brief(" in orch_text)
-check("orchestrator-off-shortlist", "off-shortlist" in orch_text)
+check("orchestrator-off-shortlist", "confine_specialist(" in orch_text)
 check("orchestrator-dilemma", "specialist dilemma" in orch_text)
 check("orchestrator-brief-audit", '"brief_source"' in orch_text)
 

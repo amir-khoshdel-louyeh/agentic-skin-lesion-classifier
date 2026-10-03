@@ -19,7 +19,8 @@ from agents.runner import run_agent
 from control.critic import run_critic
 from control.decide import (RULE_DILEMMA, append_audit, build_report, decide,
                        reliability_of)
-from control.specialists import advocate_brief, shortlist
+from control.specialists import (advocate_brief, confine_specialist,
+                                   shortlist)
 from control.guard import run_guard
 from control.brain import (MAX_SESSIONS, diagnostic_pool, receipt_summary,
                        run_brain_step, run_specialist_briefs,
@@ -343,18 +344,8 @@ def run_round(
             disease, diseases, briefs[disease])
         claimed = run_agent(record_with_role, diag_manifest_text,
                             agent_id=agent_id, quality_text=quality_text)
-        verified = verify_receipt(claimed, record, manifest)
-        # Phase 11 acceptance: off-shortlist classes never count. The tool
-        # output is faithful, but a specialist confined to `disease` may not
-        # introduce a third candidate — it becomes no-evidence.
-        if verified.is_countable() and verified.predicted_class != disease:
-            verified = VerdictEnvelope(
-                ran=False,
-                command=verified.command,
-                reasoning=(f"Specialist off-shortlist ({verified.predicted_class} "
-                           f"not in {diseases}) — recorded as no evidence."),
-                uncertainty_flags=["tool_failed"],
-            )
+        verified = confine_specialist(
+            verify_receipt(claimed, record, manifest), disease, diseases)
         specialist_verdicts.append(verified)
     timings["specialists_s"] = round(_time.perf_counter() - _t0, 2)
     verdicts.extend(specialist_verdicts)
