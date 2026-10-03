@@ -13,9 +13,12 @@ python3 -m venv .venv --system-site-packages
 .venv/bin/pip install pyyaml pydantic torch torchvision opencv-python-headless scikit-learn
 ollama pull qwen3:8b
 openclaw models set "ollama/qwen3:8b"   # + register provider (see report/phase0_baseline.md)
-openclaw skills install --force ./openclaw-skills/skin-lesion-fast
-openclaw skills install --force ./openclaw-skills/skin-lesion-mid
-openclaw skills install --force ./openclaw-skills/skin-lesion-high
+openclaw skills install --force ./openclaw-skills/quality
+openclaw skills install --force ./openclaw-skills/brain
+openclaw skills install --force ./openclaw-skills/diagnostic
+openclaw skills install --force ./openclaw-skills/critic
+openclaw skills install --force ./openclaw-skills/specialist
+openclaw skills install --force ./openclaw-skills/chat
 
 .venv/bin/python main.py --record-index 0  # single round
 .venv/bin/python main.py --no-interactive  # all records, sequential
@@ -39,7 +42,7 @@ benchmark, shared AK blind spot, 8B agents need receipt verification
 
 ![Structured Output](assets/system-demonstration.gif)
 
-### System Workflow (current: guard → router → screen/full)
+### System Workflow (current: Quality → Brain-loop → Critic → Specialists → Referee)
 
 ```text
 Input image
@@ -48,26 +51,37 @@ Input image
 Prompt records in prompt.yaml
       │
       ▼
-Deterministic evidence first (no LLM):
-  quality-gate + abcde-analyzer + preprocess probe → router (screen/full)
+1. QUALITY AGENT (LLM thinker): pass / cleaned / flagged.
+   Never diagnoses, never stops the round.
       │
       ▼
-screen (clear cases, NO LLM): control-side ham10000-cnn directly
-full (flagged cases): 3 isolated sessions via OpenClaw
-  - tools/ham10000_cnn.py (triage)
-  - tools/multimodal_fusion.py (image+metadata)
-  - tools/ensemble_high.py (CNN+fusion mean, entropy-gated)
-  + critic (rejection-only) + specialists (top-2 disagreement only)
+2. BRAIN-LOOP (LLM supervisor + up to 3 thinker sessions):
+   Steer 1 → Session 1 → receipt → Steer 2 → Session 2 → receipt →
+   Steer 3 → Session 3. Brain may stop early. Every session sees the
+   FULL diagnostic pool and chooses its own tools.
       │
       ▼
-Receipt re-execution control-side (single-writer numbers)
+3. CRITIC (LLM, once per round, post-loop only):
+   object-with-cites or silence. Sustained objection forces refer.
       │
       ▼
-Structured JSON output
+4. SPECIALISTS (LLM, max 2, only on ≥2 distinct classes):
+   Brain-written advocate briefs, A vs B. Off-shortlist = no-evidence.
       │
       ▼
-Final Markdown report in report/
+5. REFEREE (plain code, NO LLM): counts + writes the two-part report.
+      │
+      ▼
+Receipt re-execution control-side for every claim (single-writer numbers)
+      │
+      ▼
+Two-part Markdown report in report/ (Part A machine-decides,
+Part B LLM-voices explain — deleting Part B changes nothing)
 ```
+
+No deterministic code decides quality/route/tool/stop. Code acts as
+referee (receipts, VRAM, thresholds), never as decider. Design docs:
+`proposal.tmp` (architecture), `plan.tmp` (all 12 TODOs complete).
 
 ### Agent Execution Demo
 
@@ -237,12 +251,12 @@ python tools/skin_lesion_high.py
 
 ## OpenClaw Skill Installation
 
+One role skill per chain step (replaces the retired tier skills):
+
 ```bash
-openclaw --no-color skills install --force ./openclaw-skills/skin-lesion-fast
-
-openclaw --no-color skills install --force ./openclaw-skills/skin-lesion-mid
-
-openclaw --no-color skills install --force ./openclaw-skills/skin-lesion-high
+for s in quality brain diagnostic critic specialist chat; do
+  openclaw --no-color skills install --force ./openclaw-skills/$s
+done
 ```
 
 ---
@@ -304,24 +318,38 @@ The system follows a decoupled, agent-driven orchestration architecture where th
                 │
                 ▼
    ┌─────────────────────────┐
-   │      OpenClaw Agent     │ (skin_agent.py)
+   │  Quality Agent (LLM)    │ pass / cleaned / flagged (never diagnoses)
    └─────────────────────────┘
                 │
-                ├─► [Low Latency Pass] ──────► Fast Screening Tool ────► EfficientNet-B0
-                │
-                ├─► [Standard Review] ───────► Balanced Screening Tool ──► EfficientNet-B4
-                │
-                └─► [High-Risk Escalation] ──► High Accuracy Tool ──────► ViT-Large
-                                                      │
-                ┌─────────────────────────────────────┘
                 ▼
    ┌─────────────────────────┐
-   │    Output Aggregator    │
+   │  Brain Supervisor (LLM) │ text-only steerer, NO tools, NO images
+   └──────┬──────────────────┘
+          │ steer 1..3 (hint-only subset) / early stop
+          ▼
+   ┌─────────────────────────┐
+   │ Diagnostic Sessions     │ up to 3 isolated thinkers, FULL pool,
+   │ (LLM + tools)           │ free 1..n tool choice each
+   └─────────────────────────┘
+                │ re-executed receipts only (single-writer numbers)
+                ▼
+   ┌─────────────────────────┐
+   │  Critic (LLM, once)     │ object-with-cites or silence
    └─────────────────────────┘
                 │
-                ├─► Structured JSON Output (Metrics, Confidence & Metadata)
+                ▼
+   ┌─────────────────────────┐
+   │  Specialists (LLM, ≤2)  │ Brain-written briefs, A vs B advocates
+   └─────────────────────────┘
                 │
-                └─► Final Markdown Report (Clinical Support Document)
+                ▼
+   ┌─────────────────────────┐
+   │  Referee (plain code)   │ counts + two-part report + audit
+   └─────────────────────────┘
+                │
+                ├─► Part A: receipt table + Quality line + decision + rule
+                │
+                └─► Part B: steers, reasoning, critic, advocates (zero vote)
 ```
 
 ---
@@ -490,24 +518,41 @@ Through this project I strengthened my understanding of:
 ```text
 .
 ├── openclaw-skills/
-│   ├── skin-lesion-fast/
-│   │   └── SKILL.md
-│   ├── skin-lesion-mid/
-│   │   └── SKILL.md
-│   └── skin-lesion-high/
-│       └── SKILL.md
+│   ├── quality/ brain/ diagnostic/ critic/ specialist/ chat/
+│   │   └── SKILL.md  (one role skill per chain step)
+│
+├── control/
+│   ├── quality.py brain.py critic.py specialists.py  (chain roles)
+│   ├── decide.py (referee + two-part report)  manifest.py
+│   ├── prompts.py (4 roles: orchestrator/agent/quality/brain)
+│   ├── guard.py router.py (plain tool wrappers, no decisions)
+│   ├── controller.py chat.py (post-lock Q&A sidecar)
+│   └── vram.py (sequential-GPU rails)
+│
+├── agents/
+│   └── runner.py  (isolated FULL-pool thinker sessions)
+│
+├── prompts/
+│   ├── *.system.md (locked) + *.doctor.md (physician-editable)
 │
 ├── tools/
-│   ├── skin_lesion_fast.py
-│   ├── skin_lesion_mid.py
-│   └── skin_lesion_high.py
+│   ├── ham10000_cnn.py multimodal_fusion.py ensemble_high.py
+│   ├── dermai_b0.py skin_lesion_fast/mid/high.py (legacy, callable)
+│   ├── quality_gate.py preprocess.py abcde_analyzer.py (Quality only)
+│   └── manifest.yaml (single source of WHAT exists)
 │
-├── test_tools/
-│   └── run_tools.py
+├── tests/
+│   └── test_routing.py test_quality.py test_brain.py test_diagnostic.py
+│       test_single_writer.py test_critic.py test_specialists.py
+│       test_two_part.py test_skills.py test_safety.py test_chain.py
+│       test_contract.py test_grounding.py test_receipt.py
 │
+├── orchestrator.py  (chain: Quality → Brain-loop → Critic →
+│                      Specialists → Referee)
 ├── skin_agent.py
+├── main.py
+├── gui.py  (Round tab: chain + Part A/B view; Chat tab: §2.7 grounding)
 ├── prompt.yaml
-├── tool_manifest.md
 ├── requirements.txt
 └── README.md
 ```
@@ -557,11 +602,9 @@ pip install -r requirements.txt
 ## Install OpenClaw Skills
 
 ```bash
-openclaw --no-color skills install --force ./openclaw-skills/skin-lesion-fast
-
-openclaw --no-color skills install --force ./openclaw-skills/skin-lesion-mid
-
-openclaw --no-color skills install --force ./openclaw-skills/skin-lesion-high
+for s in quality brain diagnostic critic specialist chat; do
+  openclaw --no-color skills install --force ./openclaw-skills/$s
+done
 ```
 
 ---
@@ -578,15 +621,20 @@ python skin_agent.py --record-index 0
 
 This repository includes a dedicated test orchestration script to verify the inference pipeline across all available model tiers.
 
-### Automated Tool Verification
+### Automated Verification
 
-You can execute the entire evaluation suite (Fast, Mid, and High tiers) using the provided test runner:
+Chain acceptance + unit checks (stdlib only, most need no GPU/LLM):
 
 ```bash
-python test_tools/run_tools.py
+for t in tests/test_*.py; do .venv/bin/python "$t"; done
 ```
 
-Manual verification:
+- `test_chain.py` — chain order, audit voices, autonomy, Q&A vote stands
+- `test_two_part.py` — Part A/Part B split, delete-Part-B identity
+- `test_routing.py` — deterministic routing stays retired
+- `test_receipt.py` — live single-writer re-execution (needs weights)
+
+Manual verification (single tools, needs weights):
 
 ```bash
 python tools/skin_lesion_fast.py --image path/to/image.jpg

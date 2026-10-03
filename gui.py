@@ -27,8 +27,11 @@ from tkinter import filedialog, messagebox, ttk
 import yaml
 from PIL import Image
 
-from control.chat import audit_for_record, build_debate_prompt, latest_report
+from control.chat import audit_for_record, latest_report
+from control.controller import ask, load_case
+from control.decide import PART_B_HEADER
 from control.manifest import load_manifest
+from control.prompts import ROLES as PROMPT_ROLES
 
 PROMPT_FILE = ROOT_DIR / "prompt.yaml"
 MANIFEST_FILE = ROOT_DIR / "tools" / "manifest.yaml"
@@ -56,13 +59,19 @@ HEAD_FONT = ("TkDefaultFont", 16, "bold")
 
 TOOL_BLURBS = {
     "ham10000-cnn": "Fast triage CNN — first pass, seconds per image.",
-    "quality-gate": "Blur / exposure / resolution check before screening.",
+    "quality-gate": "Blur / exposure / resolution evidence (Quality Agent).",
     "multimodal-fusion": "Image + age/sex second opinion, calibrated.",
-    "abcde-analyzer": "Deterministic shape/color heuristic (support flag).",
+    "abcde-analyzer": "Deterministic shape/color heuristic (Quality context).",
     "preprocess": "Hair removal + denoise; cleaned copy for re-check.",
     "report-pdf": "Export the latest round report to PDF.",
     "notify": "Send a desktop toast (completion / failure).",
     "ensemble-high": "High tier: CNN + multimodal mean with entropy gate.",
+    "dermai-b0": "EfficientNet-B0 second opinion, calibrated.",
+    "drdiag-vlm": "Vision-language tool (NOT in voting pool).",
+    "vlm-ollama": "Ollama VLM wrapper (NOT in voting pool).",
+    "skin-lesion-fast": "Legacy triage tier (deprecated but callable).",
+    "skin-lesion-mid": "Legacy balanced tier (deprecated but callable).",
+    "skin-lesion-high": "Legacy high tier (deprecated but callable).",
 }
 
 DECISION_STYLE = {
@@ -185,6 +194,7 @@ class App(tk.Tk):
             messagebox.showerror("Startup failed", str(exc))
             raise SystemExit(1)
         self.results: queue.Queue = queue.Queue()
+        self._last_report: str = ""
         self.photo: tk.PhotoImage | None = None
         self.tmpdir = Path(tempfile.mkdtemp(prefix="skin_gui_"))
         self.preview_file = self.tmpdir / "preview.ppm"
@@ -316,14 +326,20 @@ class App(tk.Tk):
                                "press Run.", font=TITLE_FONT, bg=GRAY_BG,
                                fg=MUTED, padx=12, pady=10, anchor=tk.W)
         self.banner.pack(fill=tk.X, padx=10, pady=(0, 6))
-        hint = ttk.Label(tab, text="Runs triage → fusion → high-tier tools "
-                         "sequentially (minutes). Screen path runs the "
-                         "triage tool directly with no agent session. The "
+        hint = ttk.Label(tab, text="Runs the chain Quality → Brain-loop "
+                         "(up to 3 thinker sessions) → Critic → Specialists "
+                         "→ Referee, strictly sequential (minutes). The "
                          "decision banner above "
                          "is the only thing that matters first.",
                          style="Muted.TLabel", wraplength=700,
                          justify=tk.LEFT)
         hint.pack(anchor=tk.W, padx=10)
+        part_bar = ttk.Frame(tab)
+        part_bar.pack(fill=tk.X, padx=10)
+        self.parta_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(part_bar, text="Show Part A only (decision source)",
+                        variable=self.parta_var,
+                        command=self._refresh_report_view).pack(anchor=tk.W)
         self.report_view = tk.Text(tab, wrap=tk.WORD, font=MONO, bg=CARD,
                                    relief=tk.FLAT, padx=8, pady=8)
         self.report_view.pack(fill=tk.BOTH, expand=True, padx=10, pady=8)
@@ -498,7 +514,7 @@ class App(tk.Tk):
         ttk.Label(bar, text="Role:").pack(side=tk.LEFT)
         self.doctor_role = tk.StringVar(value="orchestrator")
         roles = ttk.Combobox(bar, textvariable=self.doctor_role,
-                             values=("orchestrator", "agent"),
+                             values=tuple(PROMPT_ROLES),
                              state="readonly", width=14)
         roles.pack(side=tk.LEFT, padx=6)
         roles.bind("<<ComboboxSelected>>",
@@ -673,6 +689,19 @@ class App(tk.Tk):
     def _queue() -> queue.Queue:
         return _APP_QUEUE[0]
 
+    def _show_report(self, text: str) -> None:
+        """Render a round report honoring the Part A-only toggle."""
+        self._last_report = text
+        if getattr(self, "parta_var", None) is not None \
+                and self.parta_var.get():
+            text = text.split(PART_B_HEADER)[0]
+        self.report_view.delete("1.0", tk.END)
+        self.report_view.insert("1.0", text)
+
+    def _refresh_report_view(self) -> None:
+        if self._last_report:
+            self._show_report(self._last_report)
+
     def _on_round_done(self, payload: dict) -> None:
         self.run_btn.configure(state=tk.NORMAL)
         self._set_busy(False, "Ready")
@@ -687,8 +716,7 @@ class App(tk.Tk):
         decision, reason = parse_decision(text)
         self._set_banner(decision, reason)
         self.status.configure(text=f"Done: {path.name}")
-        self.report_view.delete("1.0", tk.END)
-        self.report_view.insert("1.0", text)
+        self._show_report(text)
         self._refresh_cases()
         self._refresh_reports()
 
@@ -792,8 +820,7 @@ class App(tk.Tk):
             return
         name = self.report_list.get(sel[0]).split("] ", 1)[1]
         text = (REPORT_DIR / name).read_text(encoding="utf-8")
-        self.report_view.delete("1.0", tk.END)
-        self.report_view.insert("1.0", text)
+        self._show_report(text)
         decision, reason = parse_decision(text)
         if decision != "unknown":
             self._set_banner(decision, reason)
@@ -827,7 +854,7 @@ class App(tk.Tk):
             return
         self.chat_entry.delete(0, tk.END)
         try:
-            context = build_debate_prompt(rec["_index"])
+            load_case(rec["_index"])
         except FileNotFoundError:
             self._chat_line("No round report for this case yet — run the "
                             "round first.", "sys")
@@ -836,21 +863,21 @@ class App(tk.Tk):
         self._chat_line("Assistant is thinking…", "sys")
         self._thinking = True
         self._set_busy(True, "Physician chat: waiting for agent…")
-        self._run_thread(self._chat_worker, context, question)
+        self._run_thread(self._chat_worker, rec["_index"], question)
 
     @staticmethod
-    def _chat_worker(context: str, question: str) -> None:
-        from skin_agent import run_openclaw_cli  # noqa: E402
-
+    def _chat_worker(index: int, question: str) -> None:
+        # plan.tmp §2.7 grounding only: fresh evidence-grounded session per
+        # question (stored report + receipts). The vote stands — the chat
+        # can never change the recorded decision or re-open the round.
         try:
-            response = run_openclaw_cli(context + "\nFollow-up request: "
-                                        + question, show_command=False)
-            if isinstance(response, dict) and response.get("payloads"):
-                text = "\n".join(i.get("text", "")
-                                 for i in response["payloads"])
-            else:
-                text = json.dumps(response, ensure_ascii=False)[:4000]
-            App._queue().put(("chat_done", {"ok": True, "text": text}))
+            state = load_case(index)
+        except FileNotFoundError as exc:
+            App._queue().put(("chat_done", {"ok": False, "text": str(exc)}))
+            return
+        try:
+            App._queue().put(("chat_done", {"ok": True,
+                                            "text": ask(state, question)}))
         except Exception as exc:  # noqa: BLE001 - report to the UI
             App._queue().put(("chat_done", {"ok": False, "text": str(exc)}))
 
