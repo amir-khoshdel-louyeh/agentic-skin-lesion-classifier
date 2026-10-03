@@ -551,7 +551,7 @@ Through this project I strengthened my understanding of:
 │                      Specialists → Referee)
 ├── skin_agent.py
 ├── main.py
-├── gui.py  (Round tab: chain + Part A/B view; Chat tab: §2.7 grounding)
+├── gui.py  (cases-only browser: list + preview + report status)
 ├── prompt.yaml
 ├── requirements.txt
 └── README.md

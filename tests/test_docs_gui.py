@@ -38,22 +38,18 @@ check("readme-no-tier-install",
       "skills/skin-lesion-fast" not in readme)
 check("readme-two-part", "Part A" in readme and "Part B" in readme)
 
-# 2. GUI Round tab: chain hint + Part A/B view on run_round output.
-check("gui-round-runs-chain", "run_round" in gui)
-check("gui-chain-hint", "Quality → Brain-loop" in gui)
-check("gui-part-toggle", "Part A only" in gui and "PART_B_HEADER" in gui)
-check("gui-no-screen-hint", "Screen path runs the triage" not in gui)
+# 2. GUI is cases-only: no tabs, no round/chat/doctor machinery.
+check("gui-no-tabs", "Notebook" not in gui and "tabs.add" not in gui)
+check("gui-case-card", "_case_card" in gui and "_refresh_cases" in gui
+      and "_on_case" in gui)
+check("gui-no-round", "run_round" not in gui)
+check("gui-no-chat", "ask(state" not in gui and "_send_chat" not in gui)
+check("gui-no-doctor", "doctor_role" not in gui and "PROMPT_ROLES" not in gui)
+check("gui-report-status", "latest_report" in gui)
 
-# 3. GUI chat tab: §2.7 grounding only (ask/load_case, vote stands).
-check("gui-chat-ask", "ask(state" in gui or "ask(state," in gui)
-check("gui-chat-load-case", "load_case(" in gui)
-check("gui-chat-no-raw-cli", "run_openclaw_cli" not in gui)
-check("gui-chat-no-debate", "build_debate_prompt" not in gui)
-
-# 4. GUI Doctor tab covers every prompt role.
+# 3. Prompt roles registry intact (GUI no longer consumes it).
 from control.prompts import ROLES  # noqa: E402
 
-check("gui-doctor-roles", "PROMPT_ROLES" in gui)
 check("four-roles", set(ROLES) == {"orchestrator", "agent", "quality",
                                    "brain"})
 
