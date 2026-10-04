@@ -38,14 +38,43 @@ check("readme-no-tier-install",
       "skills/skin-lesion-fast" not in readme)
 check("readme-two-part", "Part A" in readme and "Part B" in readme)
 
-# 2. GUI is cases-only: no tabs, no round/chat/doctor machinery.
-check("gui-no-tabs", "Notebook" not in gui and "tabs.add" not in gui)
+# 2. GUI is cases + one Main tab: Start button, avatars, no
+# chat/doctor/tools machinery.
+check("gui-main-tab", "Notebook" in gui and "_build_main_tab" in gui
+      and '"  Main  "' in gui)
 check("gui-case-card", "_case_card" in gui and "_refresh_cases" in gui
       and "_on_case" in gui)
-check("gui-no-round", "run_round" not in gui)
-check("gui-no-chat", "ask(state" not in gui and "_send_chat" not in gui)
+check("gui-maximized", 'state("zoomed")' in gui)
+check("gui-start", "Start" in gui and "_on_start" in gui
+      and "run_round" in gui and "on_stage" in gui)
+check("gui-avatars", "Canvas" in gui and "_draw_chain" in gui
+      and "_activate" in gui and "_apply_stage" in gui)
+check("gui-avatar-stages", all(s in gui for s in
+      ("quality", "brain", "critic", "referee", "GREEN_AVATAR")))
+check("gui-chat-box", "_build_chat_box" in gui and "chat_box" in gui
+      and "chat_entry" in gui and "_chat_line" in gui)
+check("gui-stage-log", "_log_stage" in gui and "[Referee]" in gui
+      and "[Session" in gui)
+check("gui-ask-stop", "_on_ask" in gui and "_ask_worker" in gui
+      and "_on_stop" in gui and "chat_done" in gui)
+check("gui-no-chat-tab", "_send_chat" not in gui
+      and "Physician chat" not in gui)
 check("gui-no-doctor", "doctor_role" not in gui and "PROMPT_ROLES" not in gui)
 check("gui-report-status", "latest_report" in gui)
+
+# 3. run_round emits stage progress for avatars (default off).
+orch_text = (ROOT / "orchestrator.py").read_text(encoding="utf-8")
+import inspect  # noqa: E402
+import orchestrator  # noqa: E402
+
+sig = inspect.signature(orchestrator.run_round)
+check("on-stage-param", "on_stage" in sig.parameters
+      and sig.parameters["on_stage"].default is None)
+for stage in ("quality", "brain", "session", "critic", "specialists",
+              "specialist", "referee"):
+    check(f"emit-{stage}", f'_emit("{stage}"' in orch_text)
+check("emit-steers", orch_text.count(
+    '"steer": order.get("steer", "")') >= 2)
 
 # 3. Prompt roles registry intact (GUI no longer consumes it).
 from control.prompts import ROLES  # noqa: E402

@@ -201,7 +201,12 @@ def run_round(
     agent_id: str = "main",
     borderline_threshold: float | None = None,
     careful: bool = False,
+    on_stage=None,
 ) -> Path:
+    """Run one screening round. `on_stage` (optional) receives
+    (stage, payload) progress events — quality/brain/session/critic/
+    specialists/referee — for live UI avatars. It must never raise: any
+    error inside is swallowed so reporting can never break a round."""
     startup_path_check()
     # Physician customization (Phase 8): the doctor's validated thresholds
     # drive the decision — never a hardcoded constant. Invalid doctor files
@@ -225,6 +230,16 @@ def run_round(
 
     import time as _time
     timings: dict[str, float] = {}
+
+    def _emit(stage: str, payload: dict | None = None) -> None:
+        if on_stage is None:
+            return
+        try:
+            on_stage(stage, {"record_index": record_index,
+                             **(payload or {})})
+        except Exception:
+            pass  # progress reporting must never break a round
+
     # plan.tmp chain step 1 (T2): Quality Agent (LLM thinker) runs first.
     # It decides pass|cleaned|flagged itself; it never aborts the round.
     # Control-side guard + ABCDE below remain as plain evidence for the
@@ -234,6 +249,8 @@ def run_round(
     quality = run_quality(record, render_subset(manifest, QUALITY_TOOLKIT),
                           agent_id=agent_id)
     timings["quality_s"] = round(_time.perf_counter() - _t0, 2)
+    _emit("quality", {"verdict": quality.get("verdict"),
+                      "reasons": quality.get("reasons", [])})
     _t0 = _time.perf_counter()
     guard = run_guard(str(record.get("image_path")))
     timings["guard_s"] = round(_time.perf_counter() - _t0, 2)
@@ -266,6 +283,12 @@ def run_round(
     brain_sessions += 1
     while True:
         steers.append({"session": len(verdicts) + 1, **order})
+        _emit("brain", {"session": len(verdicts) + 1,
+                        "stop": bool(order.get("stop")),
+                        "steer": order.get("steer", ""),
+                        "suggested_subset": order.get(
+                            "suggested_subset", []),
+                        "why": order.get("why", "")})
         claimed = run_agent(dict(record), diag_manifest_text,
                             agent_id=agent_id, quality_text=quality_text,
                             steer=order["steer"],
@@ -273,6 +296,11 @@ def run_round(
         llm_sessions += 1
         verified = verify_receipt(claimed, record, manifest)
         verdicts.append(verified)
+        _emit("session", {"n": len(verdicts),
+                          "steer": order.get("steer", ""),
+                          "class": verified.predicted_class,
+                          "confidence": verified.confidence,
+                          "tools_run": session_tools(verified.command)})
         brain_history.append(receipt_summary(
             verified, len(verdicts),
             tools=session_tools(verified.command)))
@@ -323,6 +351,8 @@ def run_round(
         quality_text=quality_text,
     )
     timings["critic_s"] = round(_time.perf_counter() - _t0, 2)
+    _emit("critic", {"sustained": critic_sustained,
+                     "reasons": critic_reasons})
 
     # Specialists run on disagreement only (plan.tmp T7): the trigger is
     # code counting (≥2 distinct countable classes, top-2 by re-executed
@@ -333,6 +363,8 @@ def run_round(
     # the advocate sessions still run.
     _t0 = _time.perf_counter()
     diseases = shortlist(verdicts) or []
+    _emit("specialists", {"triggered": bool(diseases),
+                          "shortlist": diseases})
     briefs, brief_source = ({}, "none")
     if diseases:
         briefs, brief_source = run_specialist_briefs(
@@ -347,6 +379,9 @@ def run_round(
         verified = confine_specialist(
             verify_receipt(claimed, record, manifest), disease, diseases)
         specialist_verdicts.append(verified)
+        _emit("specialist", {"disease": disease,
+                             "class": verified.predicted_class,
+                             "countable": verified.is_countable()})
     timings["specialists_s"] = round(_time.perf_counter() - _t0, 2)
     verdicts.extend(specialist_verdicts)
 
@@ -365,6 +400,9 @@ def run_round(
             "rule": RULE_DILEMMA,
             "verdicts_counted": sum(1 for v in verdicts if v.is_countable()),
         }
+    _emit("referee", {"decision": decision["decision"],
+                       "reason": decision["reason"],
+                       "rule": decision.get("rule", "unknown")})
     specialist_texts = [
         {"disease": v.predicted_class, "reasoning": v.reasoning}
         for v in specialist_verdicts if v.is_countable()
