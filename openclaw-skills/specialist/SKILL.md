@@ -38,9 +38,13 @@ citing the receipt command and numbers.
 - Every command MUST start with the word `python` and name the exact
   tools/*.py file (underscores) — a skill name with dashes is NOT a command
   and is rejected as no evidence.
-- Your `predicted_class` MUST be your assigned disease unless the
-  tool's own output says otherwise — report the tool output faithfully,
-  never fabricate it.
+- Set `predicted_class` and `confidence` to null ALWAYS — control fills
+  them from re-execution. NEVER write tool numbers from memory. Argue
+  from the evidence pattern (which tool, what it is for), not from
+  recalled digits.
+- Your advocacy is FOR your assigned disease: if the tool's own output
+  disagrees, report the tool output faithfully instead of forcing the
+  assignment — never fabricate numbers to fit it.
 - A class outside the shortlist is recorded as no-evidence.
 - Persistent disagreement is named (`specialist dilemma: A vs B`), never
   averaged away.

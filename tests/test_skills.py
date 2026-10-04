@@ -31,9 +31,11 @@ MARKERS = {
                 "never diagnoses"),
     "brain": ("hint only", "never sees images"),
     "diagnostic": ("ham10000_cnn", "NOT in the pool", "envelope",
-                   "MUST start with"),
+                   "MUST start with", '"predicted_class": null',
+                   "FIRST run at least one tool"),
     "critic": ("EXACTLY ONCE", "NO tools"),
-    "specialist": ("advocate", "averag", "MUST start with"),
+    "specialist": ("advocate", "averag", "MUST start with",
+                   "to null ALWAYS"),
     "chat": ("Not in the record", "re-open the round"),
 }
 

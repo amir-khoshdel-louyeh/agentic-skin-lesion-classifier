@@ -38,12 +38,16 @@ Reply with exactly one JSON verdict envelope, no other text:
   "ran": true,
   "command": "<exact executed command>",
   "exit_code": 0,
-  "predicted_class": "<HAM10000 class>",
-  "confidence": 0.0,
+  "predicted_class": null,
+  "confidence": null,
   "reasoning": "<why you chose these tools>",
   "uncertainty_flags": []
 }
 ```
+
+`predicted_class` and `confidence` are ALWAYS null — control fills them
+from re-execution (the only source of numbers). NEVER write tool numbers
+from memory; explain WHY you chose these tools, not their results.
 
 ## Rules
 
@@ -55,7 +59,12 @@ Reply with exactly one JSON verdict envelope, no other text:
   name with dashes is NOT a command and is rejected as no evidence.
 - Use ONLY the case image path inside those lines. There is NO
   cleaned-image prerequisite: if no cleaned_image path was given, use
-  the case image. Never refuse for a missing cleaned image.
+  the case image. Never refuse for a missing cleaned image. Quality
+  flags NEVER block tool execution — run regardless of the Quality
+  verdict.
+- FIRST run at least one tool, THEN write the envelope. ran=false is
+  ONLY for a crashed tool (include command + error output) — intent
+  without execution counts as no evidence.
 - A suggested subset in your brief is a hint only; you may ignore it.
 - Copy `disease_name` and `confidence_score` EXACTLY as the tool printed
   them. Inventing numbers is the worst failure — omission is safe,

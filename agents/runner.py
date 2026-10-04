@@ -61,11 +61,22 @@ def build_agent_prompt(
     )
     exact_choice = (
         "\nFree choice, zero transcription:\n"
+        "- FIRST run at least one tool command, THEN write the envelope. "
+        "Intent without execution counts as no evidence — narrating what "
+        "you WOULD run earns nothing.\n"
+        "- ran=false is ONLY for a tool that crashed: include the exact "
+        "command and its error output in reasoning.\n"
         "- Choose 1..n LINES above and run each EXACTLY as written "
         "(copy-paste the whole line). Do not retype, rename, or shorten.\n"
         "- Use ONLY the case image path inside those lines. There is NO "
         "cleaned-image prerequisite: if no cleaned_image path was given, "
         "use the case image. Never refuse for a missing cleaned image.\n"
+        "- Quality flags NEVER block tool execution — run regardless of "
+        "the Quality verdict.\n"
+        "- In your envelope, set predicted_class and confidence to null "
+        "ALWAYS. NEVER write tool numbers from memory — control fills "
+        "them from re-execution. Explain WHY you chose these tools, not "
+        "their numeric results.\n"
     )
     hint_names = ", ".join(hint) if hint else "none"
     steer_section = (

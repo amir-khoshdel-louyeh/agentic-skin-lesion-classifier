@@ -83,6 +83,7 @@ class App(tk.Tk):
         self.tmpdir = Path(tempfile.mkdtemp(prefix="skin_gui_"))
         self.preview_file = self.tmpdir / "preview.ppm"
         self.results: queue.Queue = queue.Queue()
+        self._run_stem: str = ""
         self._stage_state: dict[str, dict] = {}
         self._reset_stages()
         self._build()
@@ -184,8 +185,10 @@ class App(tk.Tk):
         self.chat_box.configure(state=tk.DISABLED)
 
     def _log_stage(self, stage: str, payload: dict) -> None:
-        rec = self._selected()
-        img = Path(rec["image_path"]).stem if rec else "?"
+        # Image stem snapshotted at Start: the user may click other cases
+        # mid-round, and the log must name the RUNNING case, not the
+        # currently selected one.
+        img = self._run_stem or "?"
         if stage == "quality":
             reasons = "; ".join(payload.get("reasons", [])[:2])
             self._chat_line(
@@ -371,6 +374,7 @@ class App(tk.Tk):
             return
         self.main_case_var.set(
             f"Case {rec['_index']}: {Path(rec['image_path']).stem}")
+        self._run_stem = Path(rec["image_path"]).stem
         self._reset_stages()
         self._draw_chain()
         self.start_btn.configure(state=tk.DISABLED)

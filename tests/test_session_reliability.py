@@ -67,9 +67,21 @@ try:
 except KeyError:
     check("unknown-tool-fails-fast", True)
 
-# 2. Prompt: exact-lines choice + prerequisite ban.
+# 2. Prompt: exact-lines choice + prerequisite ban + null-numbers.
+from control.enforcement import JSON_INSTRUCTION  # noqa: E402
+
+check("envelope-null-rule", "to null ALWAYS" in JSON_INSTRUCTION
+      and "NEVER report" in JSON_INSTRUCTION
+      and "ONLY source of numbers" in JSON_INSTRUCTION)
 prompt = build_agent_prompt(record, case_text, quality_text="Quality: pass",
                             steer="Check.", hint=["ham10000-cnn"])
+check("prompt-null-numbers", "to null" in prompt
+      and "ALWAYS" in prompt
+      and "NEVER write tool numbers" in prompt)
+check("prompt-execution-first", "FIRST run at least one tool" in prompt
+      and "Intent without execution counts as no evidence" in prompt)
+check("prompt-quality-never-blocks", "NEVER block" in prompt
+      or "never blocks tool execution" in prompt)
 check("prompt-exact-lines", "EXACTLY as written" in prompt
       and "copy-paste" in prompt)
 check("prompt-no-prerequisite", "NO" in prompt
@@ -180,13 +192,31 @@ check("repair-prompt-complete", BAD in repair and "bad form" in repair
       and "EXACT lines" in repair and "Reply ONCE" in repair
       and "JSON object" in repair)
 
-# 5. Skill documents exact-lines + ban.
+# 5. Skill documents exact-lines + ban + null envelope.
 skill = (ROOT / "openclaw-skills" / "diagnostic" / "SKILL.md"
          ).read_text(encoding="utf-8")
 check("skill-exact-lines", "copy-paste" in skill
       and "EXACT pre-filled" in skill)
 check("skill-no-prerequisite", "NO" in skill
       and "cleaned-image prerequisite" in skill)
+check("skill-null-envelope", '"predicted_class": null' in skill
+      and "NEVER write tool numbers" in skill)
+
+# 6. Null-claim flows: agent reports nulls, re-execution fills them —
+# one call, no repair, final numbers from the referee.
+calls.clear()
+runner_mod.run_openclaw_cli = _cli_factory(
+    [_envelope(GOOD, cls=None, conf=None)])
+try:
+    out = run_session(record, case_text, _verify)
+    check("null-claim-filled", out.ran is True
+          and out.predicted_class == "Melanoma"
+          and out.confidence == 0.7 and len(calls) == 1,
+          f"{out} calls={len(calls)}")
+except Exception as exc:  # noqa: BLE001
+    check("null-claim-filled", False, f"raised: {exc}")
+finally:
+    runner_mod.run_openclaw_cli = _real
 
 print(f"{len(failures)} failures")
 raise SystemExit(1 if failures else 0)

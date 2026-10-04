@@ -134,6 +134,13 @@ finally:
 
 check("repair-prompt-schema",
       "pass|cleaned|flagged" in build_quality_repair_prompt("garbage"))
+check("repair-prompt-names-defect",
+      "claimed cleaned without a cleaned_image path" in
+      build_quality_repair_prompt(
+          "garbage", ["claimed cleaned without a cleaned_image path"]))
+check("quality-no-fake-cleaning",
+      "did not perform" in load_role("quality")
+      or "did not clean" in load_role("quality"))
 
 # 4. Role files: locked layer carries the rules.
 role_text = load_role("quality")

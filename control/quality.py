@@ -47,11 +47,15 @@ def _release_llm() -> None:
         pass
 
 
-def build_quality_repair_prompt(raw: str) -> str:
+def build_quality_repair_prompt(raw: str,
+                                  reasons: list[str] | None = None
+                                  ) -> str:
+    defect = ("Specifically: " + "; ".join(str(r)[:200] for r in reasons)
+              if reasons else
+              "It was not a valid quality verdict.")
     return (
-        "Your previous reply was rejected: it was not a valid quality "
-        "verdict. Reply ONCE more with exactly one JSON object, no other "
-        "text: " + QUALITY_SCHEMA +
+        "Your previous reply was rejected. " + defect + " Reply ONCE more "
+        "with exactly one JSON object, no other text: " + QUALITY_SCHEMA +
         "\nPrevious reply:\n" + (raw or "").strip()[:2000]
     )
 
@@ -169,7 +173,7 @@ def run_quality(record: dict, toolkit_text: str,
     # valid or fail-safe flagged — is final and flows forward.
     try:
         retry_response = run_openclaw_cli(
-            build_quality_repair_prompt(raw),
+            build_quality_repair_prompt(raw, first.get("reasons", [])),
             agent_id=agent_id, show_command=False)
     except Exception:  # noqa: BLE001 - keep the first fail-safe
         _release_llm()

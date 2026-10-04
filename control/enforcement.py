@@ -26,11 +26,12 @@ The command MUST start with the word python and name a tools/*.py file \
 exactly as listed above (underscores, e.g. \
 python tools/ham10000_cnn.py --image <path_to_image>); a skill name with \
 dashes is NOT a command, and anything else is rejected as no evidence.
-predicted_class and confidence are filled in control-side from
-re-execution: you MAY set them to null. If you report tool numbers,
-copy disease_name and confidence_score EXACTLY as the tool printed
-them; inventing numbers is the worst failure — omission is safe,
-fabrication is not.
+Set predicted_class and confidence to null ALWAYS — control fills them
+in from re-execution, which is the ONLY source of numbers. NEVER report
+tool numbers yourself: transcribing disease_name or confidence_score,
+even from memory, is forbidden because misreporting poisons every
+downstream reader. Omission is required; fabrication is the worst
+failure.
 """ % (list(HAM10000_CLASSES),)
 
 _JSON_OBJECT_RE = re.compile(r"\{.*\}", re.DOTALL)

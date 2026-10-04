@@ -51,6 +51,8 @@ check("gui-avatars", "Canvas" in gui and "_draw_chain" in gui
       and "_activate" in gui and "_apply_stage" in gui)
 check("gui-avatar-stages", all(s in gui for s in
       ("quality", "brain", "critic", "referee", "GREEN_AVATAR")))
+check("gui-run-stem", "_run_stem" in gui
+      and "currently selected one" in gui)
 check("gui-chat-box", "_build_chat_box" in gui and "chat_box" in gui
       and "chat_entry" in gui and "_chat_line" in gui)
 check("gui-stage-log", "_log_stage" in gui and "[Referee]" in gui

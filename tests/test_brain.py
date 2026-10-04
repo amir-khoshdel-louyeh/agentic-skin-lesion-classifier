@@ -102,6 +102,8 @@ role_text = load_role("brain")
 check("role-loads", "steer" in role_text.lower())
 check("role-text-only", "never see images" in role_text)
 check("role-hint-only", "hint only" in role_text)
+check("role-no-quality-tasks", "never assign" in role_text
+      and "verify quality" in role_text)
 
 # 5. Prompt is text-only: no image path may leak to the Brain.
 manifest = load_manifest(ROOT / "tools" / "manifest.yaml")
