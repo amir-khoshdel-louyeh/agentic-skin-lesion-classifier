@@ -70,6 +70,23 @@ check("prompt-hides-support", "quality_gate" not in prompt
 check("prompt-isolates-sessions", "invisible to you" in prompt
       or "THIS session only" in prompt)
 
+# 3b. Command form is foolproof: MUST start with python, skill names
+# banned, full example shown — in pool text, session prompt, envelope
+# instruction, and role skills.
+check("pool-command-rule", "MUST start with" in diag_text
+      and "NOT a command" in diag_text)
+check("prompt-command-rule", "MUST start with" in prompt
+      and "python tools/ham10000_cnn.py --image" in prompt)
+from control.enforcement import JSON_INSTRUCTION  # noqa: E402
+
+check("envelope-command-rule", "MUST start with" in JSON_INSTRUCTION
+      and "NOT a command" in JSON_INSTRUCTION)
+for skill in ("diagnostic", "specialist"):
+    text = (ROOT / "openclaw-skills" / skill / "SKILL.md").read_text(
+        encoding="utf-8")
+    check(f"skill-{skill}-command-rule", "MUST start with" in text
+          and "NOT a command" in text)
+
 # 4. Free choice flows through: session output parses; tools derived
 # control-side from the verified command, never from prose.
 # NOTE: agents/runner.py binds run_openclaw_cli at import time, so the

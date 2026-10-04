@@ -63,12 +63,14 @@ decide_body = decide_src.split("def decide(")[1].split("\ndef ")[0]
 check("decide-ignores-reliability", "reliability" not in decide_body,
       "decide() reads the informational tag")
 
-# 3. Wiring: every agent claim flows through verify_receipt before it
-# can vote; quality never enters the verdict list.
+# 3. Wiring: every agent claim flows through run_session (claim →
+# verify → one targeted repair) before it can vote; quality never
+# enters the verdict list.
 orch_text = (ROOT / "orchestrator.py").read_text(encoding="utf-8")
-check("claims-re-executed-twice", orch_text.count(
-    "verify_receipt(claimed, record, manifest)") == 2,
-    "session + specialist call sites")
+check("claims-verified-twice", orch_text.count("run_session(") == 2,
+      "session + specialist call sites")
+check("verify-injected", "verify_receipt(c, record, manifest)" in
+      orch_text)
 check("no-unverified-append",
       "verdicts.append(verified)" in orch_text
       and "verdicts.append(quality" not in orch_text

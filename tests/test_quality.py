@@ -16,8 +16,10 @@ sys.path.insert(0, str(ROOT))
 from control.manifest import load_manifest, render_subset  # noqa: E402
 from control.prompts import load_role  # noqa: E402
 from control.quality import (  # noqa: E402
+    FAILSAFE_CITE,
     QUALITY_TOOLKIT,
     build_quality_prompt,
+    build_quality_repair_prompt,
     parse_quality,
     quality_line,
     run_quality,
@@ -87,6 +89,51 @@ except Exception as exc:  # noqa: BLE001
     check("backend-failure-flagged", False, f"raised: {exc}")
 finally:
     skin_agent.run_openclaw_cli = _real
+
+# 3b. Exactly one repair retry on parse failure: garbage then valid
+# recovers; garbage twice stays fail-safe flagged. Genuine flagged
+# verdicts (real cites) never trigger a retry.
+calls = []
+
+
+def _garbage_then_valid(*args, **kwargs):
+    calls.append(args[0][:40])
+    if len(calls) == 1:
+        return {"payloads": [{"text": "~~ not json ~~"}]}
+    return {"payloads": [{"text": json.dumps(
+        {"verdict": "pass", "reasons": ["sharp"],
+         "cites": ["quality_gate: pass"], "cleaned_image": None})}]}
+
+
+skin_agent.run_openclaw_cli = _garbage_then_valid
+try:
+    out = run_quality({"image_path": "x.jpg", "metadata": {}},
+                      "toolkit", agent_id="main")
+    check("repair-retry-recovers", out["verdict"] == "pass"
+          and len(calls) == 2, f"{out} calls={len(calls)}")
+except Exception as exc:  # noqa: BLE001
+    check("repair-retry-recovers", False, f"raised: {exc}")
+finally:
+    skin_agent.run_openclaw_cli = _real
+
+
+def _always_garbage(*args, **kwargs):
+    return {"payloads": [{"text": "~~ not json ~~"}]}
+
+
+skin_agent.run_openclaw_cli = _always_garbage
+try:
+    out = run_quality({"image_path": "x.jpg", "metadata": {}},
+                      "toolkit", agent_id="main")
+    check("double-garbage-flagged", out["verdict"] == "flagged"
+          and out["cites"] == [FAILSAFE_CITE], str(out))
+except Exception as exc:  # noqa: BLE001
+    check("double-garbage-flagged", False, f"raised: {exc}")
+finally:
+    skin_agent.run_openclaw_cli = _real
+
+check("repair-prompt-schema",
+      "pass|cleaned|flagged" in build_quality_repair_prompt("garbage"))
 
 # 4. Role files: locked layer carries the rules.
 role_text = load_role("quality")

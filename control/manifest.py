@@ -63,9 +63,17 @@ USAGE_BY_CATEGORY = {
 }
 
 
+COMMAND_FORM_RULE = (
+    "Every command MUST start with the word `python` — copy a line "
+    "below EXACTLY, replacing only the <path> argument. A skill name "
+    "is NOT a command."
+)
+
+
 def render_for_agents(manifest: Manifest) -> str:
     """Prompt-safe tool listing: ready tools only, no legacy docs."""
-    lines = ["Available tools (use EXACTLY these commands):", ""]
+    lines = ["Available tools (use EXACTLY these commands):",
+             COMMAND_FORM_RULE, ""]
     for tool in manifest.tools:
         if tool.status != "ready":
             continue
@@ -76,6 +84,38 @@ def render_for_agents(manifest: Manifest) -> str:
             f"`python {tool.command} {usage}` "
             f"(needs: {', '.join(tool.requires) or 'nothing'})"
         )
+    return "\n".join(lines)
+
+
+def render_subset_for_case(manifest: Manifest, names: tuple[str, ...],
+                           record: dict) -> str:
+    """Pre-rendered EXACT command lines for one case.
+
+    Every line is complete and runnable as written: the real image path
+    and (where required) the real metadata JSON are already filled in.
+    Sessions choose 1..n LINES freely but run them EXACTLY (copy-paste):
+    nothing left to retype, rename, or misquote. Unknown names raise
+    KeyError (fail fast).
+    """
+    import json as _json
+
+    wanted = set(names)
+    known = {t.name for t in manifest.tools}
+    unknown = wanted - known
+    if unknown:
+        raise KeyError(f"Unknown tools in subset: {sorted(unknown)}")
+    image = str(record.get("image_path"))
+    metadata = _json.dumps(record.get("metadata", {}), ensure_ascii=False)
+    lines = ["Choose 1..n of these EXACT lines and run each EXACTLY as",
+             "written (copy-paste the whole line).",
+             COMMAND_FORM_RULE, ""]
+    for tool in manifest.tools:
+        if tool.status != "ready" or tool.name not in wanted:
+            continue
+        cmd = f"python {tool.command} --image {image}"
+        if "metadata" in tool.requires:
+            cmd += f" --metadata '{metadata}'"
+        lines.append(f"- {tool.name}: `{cmd}`")
     return "\n".join(lines)
 
 
@@ -92,7 +132,8 @@ def render_subset(manifest: Manifest, names: tuple[str, ...]) -> str:
     unknown = wanted - known
     if unknown:
         raise KeyError(f"Unknown tools in subset: {sorted(unknown)}")
-    lines = ["Available tools (use EXACTLY these commands):", ""]
+    lines = ["Available tools (use EXACTLY these commands):",
+             COMMAND_FORM_RULE, ""]
     for tool in manifest.tools:
         if tool.status != "ready" or tool.name not in wanted:
             continue

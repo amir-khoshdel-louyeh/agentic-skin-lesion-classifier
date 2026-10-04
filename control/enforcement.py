@@ -22,6 +22,10 @@ Schema: {"ran": bool, "command": string, "exit_code": int|null, \
 "tool_failed","disagreement"]}.
 If you could not run a tool, set ran=false and explain in reasoning.
 Report the exact command you ran plus your reasoning in words.
+The command MUST start with the word python and name a tools/*.py file \
+exactly as listed above (underscores, e.g. \
+python tools/ham10000_cnn.py --image <path_to_image>); a skill name with \
+dashes is NOT a command, and anything else is rejected as no evidence.
 predicted_class and confidence are filled in control-side from
 re-execution: you MAY set them to null. If you report tool numbers,
 copy disease_name and confidence_score EXACTLY as the tool printed

@@ -31,6 +31,30 @@ QUALITY_SCHEMA = (
 
 VALID_VERDICTS = ("pass", "cleaned", "flagged")
 
+# Fail-safe cite written ONLY by parse_quality() on unparseable or
+# schema-violating replies. run_quality() treats a verdict carrying
+# exactly this cite as "parse failed" and grants one repair retry;
+# anything else (including a genuine `flagged`) is final.
+FAILSAFE_CITE = "fail-safe: unparseable or schema-violating reply"
+
+
+def _release_llm() -> None:
+    """Best-effort LLM unload after a session (sequential GPU)."""
+    try:
+        from control.vram import unload_ollama as _unload
+        _unload()
+    except Exception:
+        pass
+
+
+def build_quality_repair_prompt(raw: str) -> str:
+    return (
+        "Your previous reply was rejected: it was not a valid quality "
+        "verdict. Reply ONCE more with exactly one JSON object, no other "
+        "text: " + QUALITY_SCHEMA +
+        "\nPrevious reply:\n" + (raw or "").strip()[:2000]
+    )
+
 
 def build_quality_prompt(record: dict, role_text: str,
                           toolkit_text: str) -> str:
@@ -62,7 +86,7 @@ def parse_quality(raw: str) -> dict:
         return {
             "verdict": "flagged",
             "reasons": [str(r)[:300] for r in reasons] or ["invalid output"],
-            "cites": ["fail-safe: unparseable or schema-violating reply"],
+            "cites": [FAILSAFE_CITE],
             "cleaned_image": None,
         }
 
@@ -137,12 +161,26 @@ def run_quality(record: dict, toolkit_text: str,
                          for item in response["payloads"])
     else:
         raw = json.dumps(response, ensure_ascii=False)
+    first = parse_quality(raw)
+    if first["cites"] != [FAILSAFE_CITE]:
+        _release_llm()
+        return first
+    # Exactly one repair retry on parse failure; whatever comes back —
+    # valid or fail-safe flagged — is final and flows forward.
     try:
-        from control.vram import unload_ollama as _unload
-        _unload()  # sequential GPU: free LLM VRAM before tool phases
-    except Exception:
-        pass
-    return parse_quality(raw)
+        retry_response = run_openclaw_cli(
+            build_quality_repair_prompt(raw),
+            agent_id=agent_id, show_command=False)
+    except Exception:  # noqa: BLE001 - keep the first fail-safe
+        _release_llm()
+        return first
+    if isinstance(retry_response, dict) and retry_response.get("payloads"):
+        retry_raw = "\n".join(item.get("text", "")
+                              for item in retry_response["payloads"])
+    else:
+        retry_raw = json.dumps(retry_response, ensure_ascii=False)
+    _release_llm()
+    return parse_quality(retry_raw)
 
 
 def quality_line(quality: dict) -> str:

@@ -51,6 +51,22 @@ def build_agent_prompt(
     extra_section = f"\nRole assignment: {extra}\n" if extra else ""
     quality_section = (f"\nQuality Agent (chain step 1): {quality_text}\n"
                        if quality_text else "")
+    command_form = (
+        "\nCommand form (no exceptions):\n"
+        "- Every command MUST start with the word `python`.\n"
+        "- Name the exact tools/*.py file from the pool above "
+        "(underscores, e.g. ham10000_cnn.py) — a skill name with dashes "
+        "is NOT a command and is rejected as no evidence.\n"
+        "- Example: python tools/ham10000_cnn.py --image <path_to_image>\n"
+    )
+    exact_choice = (
+        "\nFree choice, zero transcription:\n"
+        "- Choose 1..n LINES above and run each EXACTLY as written "
+        "(copy-paste the whole line). Do not retype, rename, or shorten.\n"
+        "- Use ONLY the case image path inside those lines. There is NO "
+        "cleaned-image prerequisite: if no cleaned_image path was given, "
+        "use the case image. Never refuse for a missing cleaned image.\n"
+    )
     hint_names = ", ".join(hint) if hint else "none"
     steer_section = (
         f"\nBrain steer for THIS session only (previous sessions stay "
@@ -64,6 +80,8 @@ def build_agent_prompt(
         f"Case image: {record.get('image_path')}\n"
         f"Case metadata: {metadata}\n"
         f"Available tools (FULL pool, free choice):\n{manifest_text}\n"
+        f"{command_form}"
+        f"{exact_choice}"
         f"{steer_section}\n"
         "Decide yourself which 1..n tools to run, in which order, then "
         "report.\n" + JSON_INSTRUCTION
@@ -117,3 +135,74 @@ def run_agent(
                 reasoning=f"Invalid envelope after repair retry: {exc}",
                 uncertainty_flags=["tool_failed"],
             )
+
+
+RECEIPT_REJECTED = "Receipt rejected:"
+
+
+def build_receipt_repair_prompt(bad_command: str, reason: str,
+                                manifest_text: str, quality_text: str = "",
+                                steer: str = "") -> str:
+    return (
+        "Your reported command was REJECTED and counted as no evidence:\n"
+        f"command: {bad_command}\nreason: {reason}\n\n"
+        "Do not explain. Reply ONCE with a corrected single JSON verdict "
+        "envelope (same schema), using one of these EXACT lines "
+        "(copy-paste the whole line):\n"
+        f"{manifest_text}\n"
+        + (f"\nQuality: {quality_text}\n" if quality_text else "")
+        + (f"\nActive steer: {steer}\n" if steer else "")
+        + JSON_INSTRUCTION
+    )
+
+
+def run_session(
+    record: dict,
+    manifest_text: str,
+    verify,
+    agent_id: str = "main",
+    quality_text: str = "",
+    steer: str = "",
+    hint: tuple | list = (),
+) -> VerdictEnvelope:
+    """Claim → verify → one targeted repair on receipt rejection.
+
+    `verify` is a callable taking a VerdictEnvelope and returning the
+    re-executed VerdictEnvelope (e.g. a verify_receipt partial). Genuine
+    ran=false passes through untouched — only a *claimed* run whose
+    command the referee rejects gets exactly one correction retry.
+    Never raises: verification errors become no-evidence.
+    """
+    claimed = run_agent(record, manifest_text, agent_id=agent_id,
+                        quality_text=quality_text, steer=steer, hint=hint)
+    try:
+        verified = verify(claimed)
+    except Exception as exc:  # noqa: BLE001 - referee must not crash
+        return VerdictEnvelope(
+            ran=False,
+            command=claimed.command,
+            reasoning=f"Verification failed: {exc}",
+            uncertainty_flags=["tool_failed"],
+        )
+    if not (claimed.ran and not verified.ran
+            and verified.reasoning.startswith(RECEIPT_REJECTED)):
+        return verified
+    try:
+        repair_raw = extract_text(run_openclaw_cli(
+            build_receipt_repair_prompt(claimed.command,
+                                        verified.reasoning,
+                                        manifest_text, quality_text,
+                                        steer),
+            agent_id=agent_id,
+        ))
+        _release_llm()
+    except Exception:  # noqa: BLE001 - keep the first rejection
+        return verified
+    try:
+        corrected = parse_envelope(repair_raw)
+    except EnvelopeError:
+        return verified
+    try:
+        return verify(corrected)
+    except Exception:  # noqa: BLE001 - keep the first rejection
+        return verified

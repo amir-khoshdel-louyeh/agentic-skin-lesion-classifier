@@ -35,6 +35,9 @@ citing the receipt command and numbers.
 
 ## Rules
 
+- Every command MUST start with the word `python` and name the exact
+  tools/*.py file (underscores) — a skill name with dashes is NOT a command
+  and is rejected as no evidence.
 - Your `predicted_class` MUST be your assigned disease unless the
   tool's own output says otherwise — report the tool output faithfully,
   never fabricate it.

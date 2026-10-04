@@ -47,6 +47,15 @@ Reply with exactly one JSON verdict envelope, no other text:
 
 ## Rules
 
+- In your session brief you receive EXACT pre-filled command lines (real
+  image path and metadata already filled in). Choose 1..n lines and run
+  each EXACTLY as written — copy-paste the whole line, never retype.
+- Every command MUST start with the word `python` and name the exact
+  tools/*.py file (underscores, e.g. `ham10000_cnn.py`) — a skill
+  name with dashes is NOT a command and is rejected as no evidence.
+- Use ONLY the case image path inside those lines. There is NO
+  cleaned-image prerequisite: if no cleaned_image path was given, use
+  the case image. Never refuse for a missing cleaned image.
 - A suggested subset in your brief is a hint only; you may ignore it.
 - Copy `disease_name` and `confidence_score` EXACTLY as the tool printed
   them. Inventing numbers is the worst failure — omission is safe,

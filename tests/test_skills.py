@@ -30,9 +30,10 @@ MARKERS = {
     "quality": ("quality_gate", "preprocess", "abcde_analyzer",
                 "never diagnoses"),
     "brain": ("hint only", "never sees images"),
-    "diagnostic": ("ham10000_cnn", "NOT in the pool", "envelope"),
+    "diagnostic": ("ham10000_cnn", "NOT in the pool", "envelope",
+                   "MUST start with"),
     "critic": ("EXACTLY ONCE", "NO tools"),
-    "specialist": ("advocate", "averag"),
+    "specialist": ("advocate", "averag", "MUST start with"),
     "chat": ("Not in the record", "re-open the round"),
 }
 

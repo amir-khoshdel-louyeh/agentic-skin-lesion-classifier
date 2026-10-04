@@ -15,7 +15,7 @@ ROOT_DIR = Path(__file__).resolve().parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from agents.runner import run_agent
+from agents.runner import run_session
 from control.critic import run_critic
 from control.decide import (RULE_DILEMMA, append_audit, build_report, decide,
                        reliability_of)
@@ -25,7 +25,8 @@ from control.guard import run_guard
 from control.brain import (MAX_SESSIONS, diagnostic_pool, receipt_summary,
                        run_brain_step, run_specialist_briefs,
                        session_tools)
-from control.manifest import load_manifest, render_subset
+from control.manifest import (load_manifest, render_subset,
+                                render_subset_for_case)
 from control.paths import resolve, startup_path_check
 from control.prompts import effective_thresholds
 from control.quality import QUALITY_TOOLKIT, quality_line, run_quality
@@ -226,7 +227,11 @@ def run_round(
     # (quality_gate/preprocess/abcde) are skills ONLY for the Quality
     # Agent (§2.1) and are hidden here.
     pool_names = diagnostic_pool(manifest)
-    diag_manifest_text = render_subset(manifest, tuple(pool_names))
+    # Pre-rendered EXACT lines for THIS case (real image path + metadata
+    # already filled in): sessions choose lines freely but copy-paste them,
+    # so command-form transcription errors cannot happen.
+    diag_manifest_text = render_subset_for_case(
+        manifest, tuple(pool_names), record)
 
     import time as _time
     timings: dict[str, float] = {}
@@ -289,12 +294,12 @@ def run_round(
                         "suggested_subset": order.get(
                             "suggested_subset", []),
                         "why": order.get("why", "")})
-        claimed = run_agent(dict(record), diag_manifest_text,
-                            agent_id=agent_id, quality_text=quality_text,
-                            steer=order["steer"],
-                            hint=order["suggested_subset"])
+        verified = run_session(
+            dict(record), diag_manifest_text,
+            lambda c: verify_receipt(c, record, manifest),
+            agent_id=agent_id, quality_text=quality_text,
+            steer=order["steer"], hint=order["suggested_subset"])
         llm_sessions += 1
-        verified = verify_receipt(claimed, record, manifest)
         verdicts.append(verified)
         _emit("session", {"n": len(verdicts),
                           "steer": order.get("steer", ""),
@@ -374,10 +379,12 @@ def run_round(
         record_with_role = dict(record)
         record_with_role["role_extra"] = advocate_brief(
             disease, diseases, briefs[disease])
-        claimed = run_agent(record_with_role, diag_manifest_text,
-                            agent_id=agent_id, quality_text=quality_text)
         verified = confine_specialist(
-            verify_receipt(claimed, record, manifest), disease, diseases)
+            run_session(
+                record_with_role, diag_manifest_text,
+                lambda c: verify_receipt(c, record, manifest),
+                agent_id=agent_id, quality_text=quality_text),
+            disease, diseases)
         specialist_verdicts.append(verified)
         _emit("specialist", {"disease": disease,
                              "class": verified.predicted_class,
