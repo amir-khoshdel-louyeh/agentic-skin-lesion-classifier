@@ -24,6 +24,10 @@ python tools/abcde_analyzer.py --image <path_to_image>
 - `abcde_analyzer`: read-only context (shape/color heuristic). Its output
   informs quality wording only — never a diagnosis.
 
+When you clean, write the copy to a stable scratch path you choose and
+report that exact path as `cleaned_image` — the path must exist on disk,
+and downstream sessions may run their tools on it (never a placeholder).
+
 ## Output
 
 Reply with exactly one JSON object, no other text:
