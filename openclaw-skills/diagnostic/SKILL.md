@@ -66,9 +66,11 @@ from memory; explain WHY you chose these tools, not their results.
   ONLY for a crashed tool (include command + error output) — intent
   without execution counts as no evidence.
 - A suggested subset in your brief is a hint only; you may ignore it.
-- Copy `disease_name` and `confidence_score` EXACTLY as the tool printed
-  them. Inventing numbers is the worst failure — omission is safe,
-  fabrication is not. Numbers are re-executed control-side anyway.
+- Do NOT transcribe any tool numbers: `predicted_class` and
+  `confidence` are always null in your envelope. Omission is required —
+  control fills the numbers from re-execution, which is the only source.
+  Fabrication is the worst failure; writing a tool's `disease_name` or
+  `confidence_score` from memory poisons every downstream reader.
 - If no tool runs, set `ran=false` and explain (recorded as no-evidence).
 - Near-threshold results get `uncertainty_flags=["borderline"]` with an
   explicit "do not rely on me alone".
