@@ -70,5 +70,20 @@ check("no-screen-path-in-orchestrator",
       '"screen"' not in orch_text and "'screen'" not in orch_text,
       "orchestrator.py still mentions a screen path")
 
+# 6. The retained wrappers are evidence-only and crash-safe: a missing
+# image yields a plain dict with no route/decision key, never an error.
+missing = "dataset/does_not_exist_xyz.jpg"
+probe = router_mod.probe_preprocess(missing)
+check("preprocess-wrapper-evidence-only",
+      isinstance(probe, dict) and probe.get("improved") is False
+      and "error" in probe and "path" not in probe
+      and "route" not in probe and "decision" not in probe,
+      str(probe))
+abcde = router_mod.run_abcde(missing)
+check("abcde-wrapper-evidence-only",
+      isinstance(abcde, dict) and "risk_band" in abcde
+      and "route" not in abcde and "decision" not in abcde,
+      str(abcde))
+
 print(f"{len(failures)} failures")
 raise SystemExit(1 if failures else 0)

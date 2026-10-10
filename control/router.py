@@ -53,6 +53,12 @@ def probe_preprocess(image: str, timeout: int = 300) -> dict:
 
     Returns {hair_pixels, improved, error}: `improved` is True when the
     cleaned copy passes quality while the original did not.
+
+    Retained on purpose (plan.tmp T1): the orchestrator does not call
+    this — the Quality Agent runs `preprocess` through its own skill —
+    but it stays as a plain, control-side evidence probe (tests /
+    maintenance). It reports deltas only and never returns a route or
+    decision, so it cannot become a decider.
     """
     import tempfile
     from pathlib import Path as _Path
