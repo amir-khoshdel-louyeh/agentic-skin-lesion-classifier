@@ -28,8 +28,8 @@ openclaw skills install --force ./openclaw-skills/chat
 Design docs: `proposal.tmp` (architecture), `plan.tmp` (phases).
 Contracts: `tools/manifest.yaml` (tools), `prompts/*.system.md` (locked) +
 `prompts/*.doctor.md` (physician-editable, thresholds 0.6–0.9, only toward
-caution — validate with `.venv/bin/python main.py --doctor-check` or the
-GUI Doctor tab; rounds fail fast on invalid edits).
+caution — validate with `.venv/bin/python main.py --doctor-check`; rounds
+fail fast on invalid edits).
 Reports land in `report/` (per-round files are git-ignored runtime artifacts).
 
 Known limits: triage CNN overconfident, VLM weights rejected after
@@ -216,7 +216,7 @@ Final Report
 ## Running the Agent
 
 ```bash
-python skin_agent.py --record-index 0
+python main.py --record-index 0
 ```
 
 ---
@@ -295,9 +295,12 @@ The models used in this pipeline were fine-tuned and validated using the **HAM10
 
 ### Model Performance Comparison
 
-The core advantage of this agentic architecture is balancing **Inference Latency (Speed)** against **Diagnostic Accuracy**. Below is the benchmarking performance across the three specialized tiers evaluated on the HAM10000 validation set:
+These are the **legacy tier tools' reported** results (the chain no longer
+routes by tier — every diagnostic session chooses freely from the full
+pool). Reproduce current numbers on a local split with
+`python benchmark.py` (see [Testing & Verification](#testing--verification)).
 
-| Model Tier | Model Architecture | Accuracy | Avg. Inference Time | Resource Footprint | Best Used For |
+| Model Tier | Model Architecture | Reported Acc. | Avg. Inference Time | Resource Footprint | Best Used For |
 | :--- | :--- | :---: | :---: | :---: | :--- |
 | **Tier 1: Fast** | `EfficientNet-B0` | ~74.2% | **~12ms** | Ultra-Lightweight | Rapid initial triage, mobile/edge scenarios |
 | **Tier 2: Mid** | `EfficientNet-B4` | ~81.5% | ~35ms | Balanced | Standard automated screening |
@@ -359,15 +362,15 @@ The system follows a decoupled, agent-driven orchestration architecture where th
 Location:
 
 ```text
-skin_agent.py
+skin_agent.py  (OpenClaw CLI bridge — transport only)
 ```
 
 Responsibilities:
 
-* Prompt handling
-* Tool selection
-* Command execution
-* Output aggregation
+* One isolated OpenClaw session per call (own session id)
+* Text transport to/from the local agent
+* No decisions: quality/route/tool/stop live in the LLM roles or the
+  plain-code referee, never here
 
 ---
 
@@ -545,12 +548,13 @@ Through this project I strengthened my understanding of:
 │   └── test_routing.py test_quality.py test_brain.py test_diagnostic.py
 │       test_single_writer.py test_critic.py test_specialists.py
 │       test_two_part.py test_skills.py test_safety.py test_chain.py
-│       test_contract.py test_grounding.py test_receipt.py
+│       test_contract.py test_grounding.py test_receipt.py test_eval.py
 │
 ├── orchestrator.py  (chain: Quality → Brain-loop → Critic →
 │                      Specialists → Referee)
-├── skin_agent.py
-├── main.py
+├── skin_agent.py  (OpenClaw CLI transport)
+├── main.py  (CLI: rounds + grounded chat)
+├── benchmark.py  (score ready tools with control/eval)
 ├── gui.py  (cases-only browser: list + preview + report status)
 ├── prompt.yaml
 ├── requirements.txt
@@ -612,18 +616,17 @@ done
 ## Run Demo
 
 ```bash
-python skin_agent.py --record-index 0
+python main.py --record-index 0
 ```
 
 ---
 
 # Testing & Verification
 
-This repository includes a dedicated test orchestration script to verify the inference pipeline across all available model tiers.
+Chain acceptance + unit checks (most need no GPU/LLM; `test_receipt.py`
+needs weights).
 
 ### Automated Verification
-
-Chain acceptance + unit checks (stdlib only, most need no GPU/LLM):
 
 ```bash
 for t in tests/test_*.py; do .venv/bin/python "$t"; done
@@ -632,7 +635,17 @@ for t in tests/test_*.py; do .venv/bin/python "$t"; done
 - `test_chain.py` — chain order, audit voices, autonomy, Q&A vote stands
 - `test_two_part.py` — Part A/Part B split, delete-Part-B identity
 - `test_routing.py` — deterministic routing stays retired
+- `test_quality.py` — Quality verdicts + cleaned-image hand-off
+- `test_session_reliability.py` — exact-line execution, repair retry
+- `test_eval.py` — ground truth, held-out split, benchmark entry point
 - `test_receipt.py` — live single-writer re-execution (needs weights)
+
+Benchmark ready diagnostic tools on the labelled split (no training):
+
+```bash
+python benchmark.py --dry-run --split heldout   # inspect the split
+python benchmark.py --split heldout --tools ham10000-cnn,multimodal-fusion
+```
 
 Manual verification (single tools, needs weights):
 
@@ -643,7 +656,7 @@ python tools/skin_lesion_mid.py --image path/to/image.jpg
 
 python tools/skin_lesion_high.py --image path/to/image.jpg
 
-python skin_agent.py --record-index 0
+python main.py --record-index 0
 ```
 
 ### Expected Outcome
