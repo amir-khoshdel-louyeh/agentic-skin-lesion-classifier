@@ -17,6 +17,9 @@ from __future__ import annotations
 
 import json
 import re as _re
+from pathlib import Path
+
+from control.paths import ROOT_DIR
 
 QUALITY_TOOLKIT: tuple[str, ...] = (
     "quality-gate",
@@ -185,6 +188,27 @@ def run_quality(record: dict, toolkit_text: str,
         retry_raw = json.dumps(retry_response, ensure_ascii=False)
     _release_llm()
     return parse_quality(retry_raw)
+
+
+def resolve_cleaned_image(record: dict, quality: dict,
+                          root: Path = ROOT_DIR) -> Path | None:
+    """Path to the cleaned image downstream sessions should use, or None.
+
+    Only a `cleaned` verdict whose `cleaned_image` exists on disk
+    qualifies. Anything else — pass/flagged, a missing or fabricated
+    path — returns None so the round keeps the original image. Quality
+    never blocks, and sessions are never pointed at a file that is not
+    there (the plan.tmp §2.1 `cleaned` hand-off).
+    """
+    if quality.get("verdict") != "cleaned":
+        return None
+    candidate = quality.get("cleaned_image")
+    if not isinstance(candidate, str) or not candidate.strip():
+        return None
+    path = Path(candidate).expanduser()
+    if not path.is_absolute():
+        path = root / path
+    return path if path.is_file() else None
 
 
 def quality_line(quality: dict) -> str:

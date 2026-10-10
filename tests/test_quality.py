@@ -22,6 +22,7 @@ from control.quality import (  # noqa: E402
     build_quality_repair_prompt,
     parse_quality,
     quality_line,
+    resolve_cleaned_image,
     run_quality,
 )
 
@@ -180,6 +181,44 @@ check("orchestrator-quality-timing", '"quality_s"' in orch_text
 check("quality-line-renders", quality_line(
     {"verdict": "flagged", "reasons": ["blur"],
      "cites": ["c"], "cleaned_image": None}).startswith("Quality: flagged"))
+
+# 8. Cleaned-image hand-off (§2.1): usable only when the file exists.
+import tempfile  # noqa: E402
+
+with tempfile.TemporaryDirectory(prefix="qclean_") as tmp:
+    root = Path(tmp)
+    real = root / "cleaned.jpg"
+    real.write_bytes(b"j")
+    record = {"image_path": "x.jpg", "metadata": {}}
+    check("cleaned-existing-resolves",
+          resolve_cleaned_image(record,
+                                {"verdict": "cleaned",
+                                 "cleaned_image": str(real)},
+                                root=root) == real)
+    check("cleaned-relative-resolves",
+          resolve_cleaned_image(record,
+                                {"verdict": "cleaned",
+                                 "cleaned_image": "cleaned.jpg"},
+                                root=root) == real)
+    check("cleaned-missing-is-none",
+          resolve_cleaned_image(record,
+                                {"verdict": "cleaned",
+                                 "cleaned_image": str(root / "nope.jpg")},
+                                root=root) is None)
+    for verdict in ("pass", "flagged"):
+        check(f"{verdict}-is-none",
+              resolve_cleaned_image(record,
+                                    {"verdict": verdict,
+                                     "cleaned_image": str(real)},
+                                    root=root) is None)
+check("cleaned-empty-is-none",
+      resolve_cleaned_image({"image_path": "x.jpg"},
+                            {"verdict": "cleaned",
+                             "cleaned_image": "  "}) is None)
+check("orchestrator-uses-cleaned", "resolve_cleaned_image(" in orch_text
+      and '"cleaned_image"' in orch_text)
+check("orchestrator-active-record", "active_record" in orch_text
+      and orch_text.count("verify_receipt(c, active_record, manifest)") == 2)
 
 print(f"{len(failures)} failures")
 raise SystemExit(1 if failures else 0)

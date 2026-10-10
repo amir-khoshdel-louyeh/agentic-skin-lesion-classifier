@@ -29,7 +29,8 @@ from control.manifest import (load_manifest, render_subset,
                                 render_subset_for_case)
 from control.paths import resolve, startup_path_check
 from control.prompts import effective_thresholds
-from control.quality import QUALITY_TOOLKIT, quality_line, run_quality
+from control.quality import (QUALITY_TOOLKIT, quality_line,
+                             resolve_cleaned_image, run_quality)
 from control.router import run_abcde
 from control.schemas import VerdictEnvelope
 
@@ -227,11 +228,8 @@ def run_round(
     # (quality_gate/preprocess/abcde) are skills ONLY for the Quality
     # Agent (§2.1) and are hidden here.
     pool_names = diagnostic_pool(manifest)
-    # Pre-rendered EXACT lines for THIS case (real image path + metadata
-    # already filled in): sessions choose lines freely but copy-paste them,
-    # so command-form transcription errors cannot happen.
-    diag_manifest_text = render_subset_for_case(
-        manifest, tuple(pool_names), record)
+    # The pre-rendered EXACT lines are built AFTER the Quality step, so a
+    # cleaned-image hand-off (§2.1) is reflected in every line.
 
     import time as _time
     timings: dict[str, float] = {}
@@ -266,7 +264,6 @@ def run_round(
                   "reasons": ["deterministic routing retired (T1); "
                               "full path always"],
                   "retired": True}
-    preprocess_info: dict | None = None
     # plan.tmp chain step 2 (T3) + §2.3 thinkers (T4): Brain-loop over
     # FULL-pool thinkers. Each session is a full thinker: case + Quality
     # text + Brain's SHORT steer + FULL diagnostic pool, free choice of
@@ -276,6 +273,21 @@ def run_round(
     # `for i in range(3)` — the loop advances only on Brain orders, with
     # MAX_SESSIONS as a fail-safe cap, and stops early on Brain `stop`.
     quality_text = quality_line(quality)
+    # plan.tmp §2.1: if the Quality Agent actually cleaned the image and
+    # the path exists, downstream sessions run on the cleaned copy;
+    # otherwise they keep the original. verify_receipt re-executes against
+    # the SAME active image, so single-writer numbers stay consistent.
+    cleaned_image = resolve_cleaned_image(record, quality)
+    active_record = dict(record)
+    if cleaned_image is not None:
+        active_record["image_path"] = str(cleaned_image)
+    preprocess_info = ({"cleaned_image": str(cleaned_image)}
+                       if cleaned_image is not None else None)
+    # Pre-rendered EXACT lines for the ACTIVE image (real path + metadata
+    # already filled in): sessions copy-paste them, so command-form
+    # transcription errors cannot happen.
+    diag_manifest_text = render_subset_for_case(
+        manifest, tuple(pool_names), active_record)
     verdicts: list = []
     steers: list[dict] = []
     sessions_log: list[dict] = []
@@ -295,8 +307,8 @@ def run_round(
                             "suggested_subset", []),
                         "why": order.get("why", "")})
         verified = run_session(
-            dict(record), diag_manifest_text,
-            lambda c: verify_receipt(c, record, manifest),
+            dict(active_record), diag_manifest_text,
+            lambda c: verify_receipt(c, active_record, manifest),
             agent_id=agent_id, quality_text=quality_text,
             steer=order["steer"], hint=order["suggested_subset"])
         llm_sessions += 1
@@ -334,7 +346,7 @@ def run_round(
 
     _t0 = _time.perf_counter()
     if careful:
-        extra = run_ensemble_verdict(record)
+        extra = run_ensemble_verdict(active_record)
         if extra is not None:
             verdicts.append(extra)
     timings["careful_ensemble_s"] = round(_time.perf_counter() - _t0, 2)
@@ -376,13 +388,13 @@ def run_round(
             diseases, brain_history, quality_text, agent_id=agent_id)
     specialist_verdicts = []
     for disease in diseases:
-        record_with_role = dict(record)
+        record_with_role = dict(active_record)
         record_with_role["role_extra"] = advocate_brief(
             disease, diseases, briefs[disease])
         verified = confine_specialist(
             run_session(
                 record_with_role, diag_manifest_text,
-                lambda c: verify_receipt(c, record, manifest),
+                lambda c: verify_receipt(c, active_record, manifest),
                 agent_id=agent_id, quality_text=quality_text),
             disease, diseases)
         specialist_verdicts.append(verified)
@@ -433,6 +445,7 @@ def run_round(
         "route": route_info,
         "quality": quality,
         "quality_text": quality_text,
+        "cleaned_image": (str(cleaned_image) if cleaned_image else None),
         "steers": steers,
         "sessions": sessions_log,
         "llm_sessions": (llm_sessions + 1 + brain_sessions + 1

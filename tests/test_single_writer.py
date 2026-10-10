@@ -69,8 +69,9 @@ check("decide-ignores-reliability", "reliability" not in decide_body,
 orch_text = (ROOT / "orchestrator.py").read_text(encoding="utf-8")
 check("claims-verified-twice", orch_text.count("run_session(") == 2,
       "session + specialist call sites")
-check("verify-injected", "verify_receipt(c, record, manifest)" in
-      orch_text)
+check("verify-injected",
+      orch_text.count("verify_receipt(c, active_record, manifest)") == 2,
+      "both call sites re-execute the active (possibly cleaned) image")
 check("no-unverified-append",
       "verdicts.append(verified)" in orch_text
       and "verdicts.append(quality" not in orch_text
