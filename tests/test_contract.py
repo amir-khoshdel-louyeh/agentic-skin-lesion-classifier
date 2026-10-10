@@ -34,6 +34,10 @@ from control.manifest import load_manifest  # noqa: E402
 manifest = load_manifest(ROOT / "tools" / "manifest.yaml")
 ready = [t for t in manifest.tools if t.status == "ready"]
 check("manifest-loads", len(ready) >= 10, f"{len(ready)} ready")
+check("legacy-tool-manifest-removed",
+      not (ROOT / "tool_manifest.md").exists(),
+      "legacy tool_manifest.md should be gone; tools/manifest.yaml is "
+      "the single source")
 
 home_skills = (Path.home() / ".openclaw" / "workspace" / "skills")
 for tool in ready:
