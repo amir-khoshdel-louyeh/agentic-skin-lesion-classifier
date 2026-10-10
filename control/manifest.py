@@ -70,23 +70,6 @@ COMMAND_FORM_RULE = (
 )
 
 
-def render_for_agents(manifest: Manifest) -> str:
-    """Prompt-safe tool listing: ready tools only, no legacy docs."""
-    lines = ["Available tools (use EXACTLY these commands):",
-             COMMAND_FORM_RULE, ""]
-    for tool in manifest.tools:
-        if tool.status != "ready":
-            continue
-        usage = USAGE_BY_CATEGORY.get(
-            tool.category, "--image <path> [--metadata <json>]")
-        lines.append(
-            f"- {tool.name} [{tool.tier}]: "
-            f"`python {tool.command} {usage}` "
-            f"(needs: {', '.join(tool.requires) or 'nothing'})"
-        )
-    return "\n".join(lines)
-
-
 def render_subset_for_case(manifest: Manifest, names: tuple[str, ...],
                            record: dict) -> str:
     """Pre-rendered EXACT command lines for one case.

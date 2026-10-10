@@ -1,28 +1,20 @@
-"""Closed-set confidence protocol, Brio-style (proposal.tmp Section 7).
+"""Consensus entropy gate for the diagnostic tools (proposal.tmp §7).
 
-Instead of trusting a generated confidence number, the agent is queried
-a second time with the 7 HAM10000 classes as the ONLY allowed options
-(Ollama JSON mode + logprobs). Reported confidence = top-option
-probability; entropy above threshold forces borderline automatically.
+The tools stack their own softmax vectors and gate the consensus with
+this helper: a distribution whose entropy exceeds the threshold is
+marked borderline, and a top class disagreeing with a tool vote adds a
+disagreement flag. Numbers still come from re-executed tool output, not
+the LLM.
+
+Retired here: the earlier Brio-style *closed-set LLM re-query* (ask the
+agent for 7-class probabilities via logprobs). It was never wired into
+a round and would reintroduce LLM-authored numbers, which the
+single-writer protocol forbids, so the unused prompt builder is gone.
 """
 
 import math
 
-from control.schemas import HAM10000_CLASSES
-
 DEFAULT_ENTROPY_THRESHOLD = 0.9  # nats; max ln(7) ~= 1.95
-
-
-def build_closed_set_prompt(case_summary: str) -> str:
-    options = "\n".join(f"- {name}" for name in HAM10000_CLASSES)
-    return (
-        'Classify the lesion. Reply with exactly one JSON object, no other '
-        'text: {"probabilities": {<class>: <probability 0..1>}, '
-        '"reasoning": string}. The class MUST be one of:\n'
-        + options
-        + '\nProbabilities must sum to 1. Case:\n'
-        + case_summary.strip()
-    )
 
 
 def entropy(probs: dict[str, float]) -> float:
