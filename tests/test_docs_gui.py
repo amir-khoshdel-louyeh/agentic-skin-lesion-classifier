@@ -3,9 +3,11 @@ Run: .venv/bin/python tests/test_docs_gui.py
 Exit non-zero on any failure.
 
 Locks in: README describes the chain (not guard→router→screen/full),
-role-skill installs, two-part report; GUI Round tab runs the chain with
-a Part A/B view; chat tab uses §2.7 grounding (ask/load_case) only;
-Doctor tab covers all prompt roles; plan TODOs all checked.
+role-skill installs, and the two-part report; the cases-only GUI has one
+Main tab that runs the chain (Start + avatars + stage log) and answers
+post-lock questions through the §2.7 grounding (ask/load_case) only; the
+four prompt roles stay registered; the retired prompt-only pipeline is
+gone from main.py/skin_agent.py; plan TODOs all checked.
 """
 import sys
 from pathlib import Path
