@@ -118,6 +118,30 @@ def ask(state: CaseState, question: str, agent_id: str = "main") -> str:
     return json.dumps(response, ensure_ascii=False)[:4000]
 
 
+def run_grounded_chat(record_index: int, agent_id: str = "main") -> None:
+    """Interactive post-lock Q&A: one fresh grounded session per question.
+
+    Continuity comes from the stored report + audit receipts, never from
+    LLM memory (plan.tmp §2.7). Raises FileNotFoundError when no round
+    report exists yet, so the caller can point at the round command.
+    """
+    state = load_case(record_index)
+    print(f"Grounded Q&A on record {record_index} ({state.report_name}).")
+    print("Answers come only from the stored evidence. "
+          "Type 'quit' to end.")
+    while True:
+        try:
+            question = input("You: ").strip()
+        except EOFError:
+            print()
+            break
+        if not question:
+            continue
+        if question.lower() in {"quit", "exit", "q"}:
+            break
+        print("Assistant: " + ask(state, question, agent_id=agent_id))
+
+
 def redo(state: CaseState, agent_id: str = "main") -> tuple[CaseState, bool]:
     """Re-run the round pipeline and reload evidence.
 

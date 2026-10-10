@@ -1,9 +1,14 @@
 """Entry point for the Agentic Skin Lesion Classifier (see proposal.tmp).
 
-Thin CLI dispatcher over the orchestrator logic in skin_agent.py:
+Thin CLI dispatcher over the orchestrator logic in orchestrator.run_round:
   python main.py --record-index 0    # single round
   python main.py --no-interactive    # all records, sequential
-  python main.py --chat --record 3   # physician debate on record 3
+  python main.py --chat --record 3   # grounded physician Q&A on record 3
+  python main.py --doctor-check      # validate prompts/*.doctor.md
+
+The retired prompt-only pipeline is gone (plan.tmp §6): every mode below
+runs the chain (Quality → Brain-loop → Critic → Specialists → Referee)
+or the grounded post-lock sidecar — never a single mega-prompt.
 """
 
 import argparse
@@ -14,11 +19,7 @@ ROOT_DIR = Path(__file__).resolve().parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from skin_agent import (
-    load_prompt_records,
-    run_interactive_chat,
-    send_records_to_openclaw,
-)
+from skin_agent import load_prompt_records
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -50,7 +51,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--chat",
         action="store_true",
-        help="Physician debate mode on the selected record.",
+        help="Physician Q&A mode on the selected record (grounded).",
     )
     parser.add_argument(
         "--doctor-check",
@@ -102,7 +103,8 @@ def resolve(path_str: str) -> Path:
 
 
 def main() -> None:
-    args = build_parser().parse_args()
+    parser = build_parser()
+    args = parser.parse_args()
     if args.doctor_check:
         from control.prompts import doctor_check
 
@@ -153,23 +155,15 @@ def main() -> None:
     if args.chat:
         if args.record is None:
             raise SystemExit("--chat requires --record <index>.")
-        from control.chat import build_debate_prompt
+        from control.controller import run_grounded_chat
 
         try:
-            print(build_debate_prompt(args.record))
+            run_grounded_chat(args.record, agent_id=args.agent_id)
         except FileNotFoundError as exc:
             raise SystemExit(
                 f"{exc}\nHint: run the round first "
                 f"(--record-index {args.record})."
             ) from exc
-        records = load_prompt_records(prompt_path)
-        if args.record < 0 or args.record >= len(records):
-            raise SystemExit("record index out of range.")
-        run_interactive_chat(
-            records[args.record],
-            agent_id=args.agent_id,
-            tool_helper_file=tool_helper_path,
-        )
         return
 
     if args.no_interactive or args.record_index is not None:
@@ -210,13 +204,9 @@ def main() -> None:
         print(f"Round report: {out}")
         return
 
-    # Default: interactive chat on the first record (matches skin_agent.py).
-    records = load_prompt_records(prompt_path)
-    run_interactive_chat(
-        records[0],
-        agent_id=args.agent_id,
-        tool_helper_file=tool_helper_path,
-    )
+    # No mode selected: show usage instead of silently running the old
+    # prompt-only path (which no longer exists).
+    parser.print_help()
 
 
 if __name__ == "__main__":

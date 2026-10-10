@@ -93,6 +93,17 @@ try:
 except py_compile.PyCompileError as exc:
     check("gui-compiles", False, str(exc)[:200])
 
+# 5b. The retired prompt-only pipeline is gone: main.py dispatches to
+# the chain + grounded sidecar only, and skin_agent.py is transport.
+main_text = (ROOT / "main.py").read_text(encoding="utf-8")
+check("main-no-legacy", "run_interactive_chat" not in main_text
+      and "send_records_to_openclaw" not in main_text)
+check("main-grounds-chat", "run_grounded_chat" in main_text)
+skin_text = (ROOT / "skin_agent.py").read_text(encoding="utf-8")
+check("skin-agent-no-megaprompt", "DEFAULT_OPENCLAW_PROMPT" not in skin_text
+      and "send_records_to_openclaw" not in skin_text
+      and "run_openclaw_cli" in skin_text)
+
 # 6. Plan TODOs all checked.
 plan = (ROOT / "plan.tmp").read_text(encoding="utf-8")
 check("plan-all-done", "- [ ] T" not in plan
