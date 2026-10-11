@@ -33,10 +33,17 @@ manifest = load_manifest(ROOT / "tools" / "manifest.yaml")
 pool = diagnostic_pool(manifest)
 diag_text = render_subset(manifest, tuple(pool))
 
-# 1. FULL pool: diagnostics in, VLM + support tools out.
+# 1. FULL pool: diagnostics in unless calibration failed; VLM + support out.
+from control.calibration import load_registry  # noqa: E402
+
+blocked = {name for name, record in load_registry().items()
+           if not (record.get("gate") or {}).get("passed")}
 for name in ("ham10000-cnn", "multimodal-fusion", "ensemble-high",
-             "dermai-b0"):
-    check(f"pool-has-{name}", name in diag_text, diag_text[:300])
+             "dermai-b0", "isic-resnet50"):
+    expected = name not in blocked
+    check(f"pool-calibration:{name}", (name in diag_text) == expected,
+          f"blocked={sorted(blocked)}")
+check("pool-not-empty", bool(diagnostic_pool(manifest)), "empty pool")
 check("pool-excludes-vlm", "drdiag-vlm" not in diag_text
       and "vlm-ollama" not in diag_text, diag_text[:300])
 for name in ("quality-gate", "preprocess", "abcde-analyzer"):
@@ -64,7 +71,7 @@ check("prompt-has-quality", "Quality: pass" in prompt)
 check("prompt-has-steer", "Check the border." in prompt)
 check("prompt-hint-is-hint", "HINT only" in prompt)
 check("prompt-has-pool", "ham10000-cnn" in prompt
-      and "multimodal-fusion" in prompt)
+      and "isic-resnet50" in prompt)
 check("prompt-hides-support", "quality_gate" not in prompt
       and "abcde_analyzer" not in prompt)
 check("prompt-isolates-sessions", "invisible to you" in prompt

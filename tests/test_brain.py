@@ -111,7 +111,7 @@ pool = diagnostic_pool(manifest)
 check("pool-excludes-vlm", "drdiag-vlm" not in pool
       and "vlm-ollama" not in pool, str(pool))
 check("pool-has-diagnostics", "ham10000-cnn" in pool
-      and "multimodal-fusion" in pool, str(pool))
+      and "isic-resnet50" in pool, str(pool))
 
 # 5b. A failed local calibration keeps a tool OUT of the pool.
 import control.calibration as calibration  # noqa: E402

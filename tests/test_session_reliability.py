@@ -50,9 +50,11 @@ check("lines-have-real-image",
 check("lines-have-real-metadata",
       '"patient_id": "A001"' in case_text or '"patient_id":"A001"' in
       case_text.replace(" ", ""))
+meta_lines = [line for line in case_text.splitlines()
+              if "ensemble-high" in line]
 check("lines-need-metadata-only-where-required",
-      "--metadata" in [line for line in case_text.splitlines()
-                       if "multimodal-fusion" in line][0])
+      bool(meta_lines) and "--metadata" in meta_lines[0],
+      "ensemble-high (metadata tool) line missing")
 cmd_lines = [line for line in case_text.splitlines()
              if line.startswith("- ")]
 check("lines-no-placeholders", all("<path" not in line

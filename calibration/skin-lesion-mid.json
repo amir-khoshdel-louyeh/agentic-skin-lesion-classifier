@@ -1,0 +1,290 @@
+{
+  "tool": "skin-lesion-mid",
+  "command": "tools/skin_lesion_mid.py",
+  "split": "heldout",
+  "split_detail": {
+    "per_class": 25,
+    "n": 175,
+    "failures": 0
+  },
+  "generated_at": "2026-10-19T14:04:54.724976+00:00",
+  "temperature": null,
+  "metrics": {
+    "n": 175,
+    "accuracy": 0.5714,
+    "balanced_accuracy": 0.5714,
+    "mean_confidence": 0.4368,
+    "ece": 0.1803,
+    "mce": 0.9824,
+    "nll": null,
+    "brier": null,
+    "per_class": {
+      "Actinic keratoses": {
+        "n": 25,
+        "recall": 0.24,
+        "precision": 1.0,
+        "f1": 0.3871
+      },
+      "Basal cell carcinoma": {
+        "n": 25,
+        "recall": 0.52,
+        "precision": 0.619,
+        "f1": 0.5652
+      },
+      "Benign keratosis": {
+        "n": 25,
+        "recall": 0.68,
+        "precision": 0.3696,
+        "f1": 0.4789
+      },
+      "Dermatofibroma": {
+        "n": 25,
+        "recall": 0.52,
+        "precision": 1.0,
+        "f1": 0.6842
+      },
+      "Melanoma": {
+        "n": 25,
+        "recall": 0.36,
+        "precision": 0.6429,
+        "f1": 0.4615
+      },
+      "Melanocytic nevi": {
+        "n": 25,
+        "recall": 0.92,
+        "precision": 0.4259,
+        "f1": 0.5823
+      },
+      "Vascular lesions": {
+        "n": 25,
+        "recall": 0.76,
+        "precision": 0.9048,
+        "f1": 0.8261
+      }
+    },
+    "reliability_bins": [
+      {
+        "bin": [
+          0.0,
+          0.0667
+        ],
+        "n": 0,
+        "avg_confidence": null,
+        "accuracy": null
+      },
+      {
+        "bin": [
+          0.0667,
+          0.1333
+        ],
+        "n": 0,
+        "avg_confidence": null,
+        "accuracy": null
+      },
+      {
+        "bin": [
+          0.1333,
+          0.2
+        ],
+        "n": 11,
+        "avg_confidence": 0.1843,
+        "accuracy": 0.0
+      },
+      {
+        "bin": [
+          0.2,
+          0.2667
+        ],
+        "n": 18,
+        "avg_confidence": 0.2348,
+        "accuracy": 0.3333
+      },
+      {
+        "bin": [
+          0.2667,
+          0.3333
+        ],
+        "n": 33,
+        "avg_confidence": 0.3022,
+        "accuracy": 0.3333
+      },
+      {
+        "bin": [
+          0.3333,
+          0.4
+        ],
+        "n": 21,
+        "avg_confidence": 0.3683,
+        "accuracy": 0.4286
+      },
+      {
+        "bin": [
+          0.4,
+          0.4667
+        ],
+        "n": 26,
+        "avg_confidence": 0.4218,
+        "accuracy": 0.5769
+      },
+      {
+        "bin": [
+          0.4667,
+          0.5333
+        ],
+        "n": 18,
+        "avg_confidence": 0.4945,
+        "accuracy": 0.8333
+      },
+      {
+        "bin": [
+          0.5333,
+          0.6
+        ],
+        "n": 11,
+        "avg_confidence": 0.5536,
+        "accuracy": 1.0
+      },
+      {
+        "bin": [
+          0.6,
+          0.6667
+        ],
+        "n": 16,
+        "avg_confidence": 0.6422,
+        "accuracy": 0.9375
+      },
+      {
+        "bin": [
+          0.6667,
+          0.7333
+        ],
+        "n": 7,
+        "avg_confidence": 0.7071,
+        "accuracy": 0.8571
+      },
+      {
+        "bin": [
+          0.7333,
+          0.8
+        ],
+        "n": 9,
+        "avg_confidence": 0.7529,
+        "accuracy": 1.0
+      },
+      {
+        "bin": [
+          0.8,
+          0.8667
+        ],
+        "n": 2,
+        "avg_confidence": 0.8234,
+        "accuracy": 1.0
+      },
+      {
+        "bin": [
+          0.8667,
+          0.9333
+        ],
+        "n": 1,
+        "avg_confidence": 0.9055,
+        "accuracy": 1.0
+      },
+      {
+        "bin": [
+          0.9333,
+          1.0
+        ],
+        "n": 2,
+        "avg_confidence": 0.9824,
+        "accuracy": 0.0
+      }
+    ],
+    "confusion_matrix": {
+      "classes": [
+        "Actinic keratoses",
+        "Basal cell carcinoma",
+        "Benign keratosis",
+        "Dermatofibroma",
+        "Melanoma",
+        "Melanocytic nevi",
+        "Vascular lesions"
+      ],
+      "rows_truth": [
+        [
+          6,
+          0,
+          15,
+          0,
+          2,
+          2,
+          0
+        ],
+        [
+          0,
+          13,
+          4,
+          0,
+          3,
+          4,
+          1
+        ],
+        [
+          0,
+          1,
+          17,
+          0,
+          0,
+          6,
+          1
+        ],
+        [
+          0,
+          2,
+          5,
+          13,
+          0,
+          5,
+          0
+        ],
+        [
+          0,
+          2,
+          4,
+          0,
+          9,
+          10,
+          0
+        ],
+        [
+          0,
+          2,
+          0,
+          0,
+          0,
+          23,
+          0
+        ],
+        [
+          0,
+          1,
+          1,
+          0,
+          0,
+          4,
+          19
+        ]
+      ]
+    }
+  },
+  "gate": {
+    "passed": false,
+    "reasons": [
+      "accuracy=0.5714 < 0.6",
+      "ece=0.1803 > 0.1"
+    ],
+    "min_accuracy": 0.6,
+    "max_ece": 0.1,
+    "min_n": 150
+  },
+  "failure_samples": []
+}

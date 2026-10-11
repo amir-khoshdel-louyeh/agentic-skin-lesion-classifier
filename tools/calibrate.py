@@ -38,6 +38,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
+from control.calibration import (  # noqa: E402
+    MAX_ECE,
+    MIN_ACCURACY,
+    fit_temperature,
+)
 from control.eval import (heldout_split, image_path_for_stem,  # noqa: E402
                           split_for_training)
 from control.manifest import load_manifest  # noqa: E402
@@ -45,8 +50,6 @@ from control.paths import resolve  # noqa: E402
 from control.schemas import HAM10000_CLASSES  # noqa: E402
 
 CLASSES = list(HAM10000_CLASSES)
-MIN_ACCURACY = 0.60
-MAX_ECE = 0.10
 MIN_N = 150
 N_BINS = 15
 
@@ -250,33 +253,6 @@ def gate(metrics_payload: dict) -> dict:
             "min_n": MIN_N}
 
 
-def fit_temperature(raw: dict[str, dict], truth: dict) -> dict:
-    """Fit T on probabilities collected at T=1.0 (log p == logits)."""
-    usable = {s: v for s, v in raw.items()
-              if s in truth and v.get("probs") and truth[s] in v["probs"]}
-    if len(usable) < 30:
-        return {"ok": False, "reason": "not enough probability rows"}
-
-    def nll(temp: float) -> float:
-        total = 0.0
-        for stem, item in usable.items():
-            scaled = {c: math.log(max(p, 1e-12)) / temp
-                      for c, p in item["probs"].items()}
-            top = max(scaled.values())
-            norm = top + math.log(sum(math.exp(v - top)
-                                      for v in scaled.values()))
-            total += -(scaled[truth[stem]] - norm)
-        return total / len(usable)
-
-    grid = [0.25 * (1.05 ** i) for i in range(90)]
-    scored = [(nll(t), t) for t in grid]
-    best_nll, best_t = min(scored)
-    before = nll(1.0)
-    return {"ok": True, "temperature": round(best_t, 3),
-            "n": len(usable), "nll_before": round(before, 4),
-            "nll_after": round(best_nll, 4)}
-
-
 def summarize(results: dict[str, dict]) -> str:
     lines = ["# Local calibration report (research use only)", "",
              f"Generated: {datetime.now(timezone.utc).isoformat()}",
@@ -329,7 +305,28 @@ def main() -> int:
     parser.add_argument("--temperature", type=float, default=1.0,
                         help="Scan temperature used before fitting.")
     parser.add_argument("--temperature-out", default="")
+    parser.add_argument("--jobs", type=int, default=1,
+                        help="Tools to evaluate concurrently (VRAM-bound).")
+    parser.add_argument("--summarize-only", action="store_true",
+                        help="Rebuild --report from existing JSON files.")
     args = parser.parse_args()
+
+    if args.summarize_only:
+        json_dir = BASE_DIR / args.json_dir
+        results = {}
+        for path in sorted(json_dir.glob("*.json")):
+            payload = json.loads(path.read_text())
+            results[payload.get("tool", path.stem)] = payload
+        if not results:
+            raise SystemExit(f"No calibration JSON in {json_dir}")
+        if not args.report:
+            raise SystemExit("--summarize-only needs --report")
+        out = BASE_DIR / args.report
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(summarize(results))
+        print(summarize(results))
+        print(f"Wrote {out}")
+        return 0
 
     manifest = load_manifest(BASE_DIR / "tools" / "manifest.yaml")
     if args.tools == "all":
@@ -351,7 +348,9 @@ def main() -> int:
             print(f"Fitting temperature for {tool.name} ...", flush=True)
             raw, failures = run_tool(tool, cases, metadata,
                                      args.temperature, args.timeout)
-            fit = fit_temperature(raw, truth)
+            fit = fit_temperature(
+                {stem: item["probs"] for stem, item in raw.items()
+                 if item.get("probs")}, truth)
             if not fit.get("ok"):
                 print(f"  skipped: {fit.get('reason')} "
                       f"({len(failures)} tool failures)")
@@ -369,8 +368,8 @@ def main() -> int:
 
     json_dir = BASE_DIR / args.json_dir
     json_dir.mkdir(parents=True, exist_ok=True)
-    results: dict[str, dict] = {}
-    for tool in tools:
+
+    def evaluate_tool(tool) -> dict:
         print(f"Running {tool.name} on {len(cases)} cases ...", flush=True)
         predictions, failures = run_tool(tool, cases, metadata, None,
                                          args.timeout)
@@ -390,13 +389,25 @@ def main() -> int:
             "gate": gate(m),
             "failure_samples": failures[:5],
         }
-        results[tool.name] = payload
         (json_dir / f"{tool.name}.json").write_text(
             json.dumps(payload, indent=2))
-        print(f"  n={m['n']} acc={m['accuracy']:.4f} "
+        print(f"  {tool.name}: n={m['n']} acc={m['accuracy']:.4f} "
               f"bal={m['balanced_accuracy']:.4f} ece={m['ece']:.4f} "
               f"-> {'PASS' if payload['gate']['passed'] else 'FAIL'}"
-              f" ({len(failures)} failures)")
+              f" ({len(failures)} failures)", flush=True)
+        return payload
+
+    results: dict[str, dict] = {}
+    if args.jobs > 1 and len(tools) > 1:
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=args.jobs) as pool:
+            for tool, payload in zip(
+                    tools, pool.map(evaluate_tool, tools)):
+                results[tool.name] = payload
+    else:
+        for tool in tools:
+            results[tool.name] = evaluate_tool(tool)
 
     if args.report:
         out = BASE_DIR / args.report
