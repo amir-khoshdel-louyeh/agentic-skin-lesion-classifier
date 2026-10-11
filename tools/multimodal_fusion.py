@@ -15,12 +15,17 @@ import sys
 from pathlib import Path
 
 from PIL import Image, ImageOps
-from torchvision import transforms
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 WEIGHTS_DIR = BASE_DIR / "models" / "multimodal"
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
+
+from tools.runtime import ensure_runtime  # noqa: E402
+
+ensure_runtime(("torch", "torchvision", "PIL"))
+
+from torchvision import transforms  # noqa: E402
 
 IDX_TO_CLASS = {
     0: "Actinic keratoses",

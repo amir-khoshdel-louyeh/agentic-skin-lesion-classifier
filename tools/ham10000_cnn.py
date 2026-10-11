@@ -19,6 +19,10 @@ WEIGHTS_DIR = BASE_DIR / "models" / "derm-cnn"
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
+from tools.runtime import ensure_runtime  # noqa: E402
+
+ensure_runtime(("torch", "PIL"))
+
 ISIC_TO_CLASS = {
     "akiec": "Actinic keratoses",
     "bcc": "Basal cell carcinoma",

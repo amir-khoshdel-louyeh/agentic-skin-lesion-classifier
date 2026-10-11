@@ -9,9 +9,18 @@ import argparse
 import json
 import os
 import sys
+from pathlib import Path
 
-import cv2
-import numpy as np
+BASE_DIR = Path(__file__).resolve().parent.parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+
+from tools.runtime import ensure_runtime  # noqa: E402
+
+ensure_runtime(("cv2", "numpy"))
+
+import cv2  # noqa: E402
+import numpy as np  # noqa: E402
 
 MIN_SIDE_PX = 128
 BLUR_THRESHOLD = 60.0

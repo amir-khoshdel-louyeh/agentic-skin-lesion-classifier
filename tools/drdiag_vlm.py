@@ -25,6 +25,10 @@ MODEL_DIR = BASE_DIR / "models" / "drdiag-vlm"
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
+from tools.runtime import ensure_runtime  # noqa: E402
+
+ensure_runtime(("torch", "transformers", "PIL"))
+
 CLASSES = [
     "Actinic keratoses",
     "Basal cell carcinoma",
