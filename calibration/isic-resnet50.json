@@ -7,59 +7,60 @@
     "n": 175,
     "failures": 0
   },
-  "generated_at": "2026-10-19T14:02:27.379990+00:00",
-  "temperature": 0.889,
+  "generated_at": "2026-10-19T15:05:02.357541+00:00",
+  "temperature": 0.933,
+  "melanoma_logit_bias": 1.5,
   "metrics": {
     "n": 175,
-    "accuracy": 0.7371,
-    "balanced_accuracy": 0.7371,
-    "mean_confidence": 0.7735,
-    "ece": 0.0895,
-    "mce": 0.3671,
-    "nll": 0.6595,
-    "brier": 0.3571,
+    "accuracy": 0.7314,
+    "balanced_accuracy": 0.7314,
+    "mean_confidence": 0.756,
+    "ece": 0.0649,
+    "mce": 0.3768,
+    "nll": 0.7382,
+    "brier": 0.3868,
     "per_class": {
       "Actinic keratoses": {
         "n": 25,
-        "recall": 0.72,
-        "precision": 0.75,
-        "f1": 0.7347
+        "recall": 0.6,
+        "precision": 0.7895,
+        "f1": 0.6818
       },
       "Basal cell carcinoma": {
         "n": 25,
-        "recall": 0.84,
-        "precision": 0.8077,
-        "f1": 0.8235
+        "recall": 0.8,
+        "precision": 0.8,
+        "f1": 0.8
       },
       "Benign keratosis": {
         "n": 25,
-        "recall": 0.6,
-        "precision": 0.6,
-        "f1": 0.6
+        "recall": 0.56,
+        "precision": 0.7368,
+        "f1": 0.6364
       },
       "Dermatofibroma": {
         "n": 25,
-        "recall": 0.64,
+        "recall": 0.6,
         "precision": 1.0,
-        "f1": 0.7805
+        "f1": 0.75
       },
       "Melanoma": {
         "n": 25,
-        "recall": 0.56,
-        "precision": 0.6364,
-        "f1": 0.5957
+        "recall": 0.8,
+        "precision": 0.4545,
+        "f1": 0.5797
       },
       "Melanocytic nevi": {
         "n": 25,
         "recall": 0.84,
-        "precision": 0.5526,
-        "f1": 0.6667
+        "precision": 0.7,
+        "f1": 0.7636
       },
       "Vascular lesions": {
         "n": 25,
-        "recall": 0.96,
+        "recall": 0.92,
         "precision": 1.0,
-        "f1": 0.9796
+        "f1": 0.9583
       }
     },
     "reliability_bins": [
@@ -95,27 +96,27 @@
           0.2,
           0.2667
         ],
-        "n": 1,
-        "avg_confidence": 0.2196,
-        "accuracy": 0.0
+        "n": 0,
+        "avg_confidence": null,
+        "accuracy": null
       },
       {
         "bin": [
           0.2667,
           0.3333
         ],
-        "n": 3,
-        "avg_confidence": 0.2996,
-        "accuracy": 0.6667
+        "n": 1,
+        "avg_confidence": 0.3083,
+        "accuracy": 0.0
       },
       {
         "bin": [
           0.3333,
           0.4
         ],
-        "n": 3,
-        "avg_confidence": 0.3778,
-        "accuracy": 0.6667
+        "n": 4,
+        "avg_confidence": 0.3732,
+        "accuracy": 0.75
       },
       {
         "bin": [
@@ -123,7 +124,7 @@
           0.4667
         ],
         "n": 8,
-        "avg_confidence": 0.4382,
+        "avg_confidence": 0.4301,
         "accuracy": 0.375
       },
       {
@@ -131,62 +132,62 @@
           0.4667,
           0.5333
         ],
-        "n": 8,
-        "avg_confidence": 0.5056,
-        "accuracy": 0.375
+        "n": 14,
+        "avg_confidence": 0.4977,
+        "accuracy": 0.3571
       },
       {
         "bin": [
           0.5333,
           0.6
         ],
-        "n": 14,
-        "avg_confidence": 0.5678,
-        "accuracy": 0.4286
+        "n": 11,
+        "avg_confidence": 0.559,
+        "accuracy": 0.6364
       },
       {
         "bin": [
           0.6,
           0.6667
         ],
-        "n": 7,
-        "avg_confidence": 0.6349,
-        "accuracy": 0.5714
+        "n": 21,
+        "avg_confidence": 0.6282,
+        "accuracy": 0.6667
       },
       {
         "bin": [
           0.6667,
           0.7333
         ],
-        "n": 17,
-        "avg_confidence": 0.7009,
-        "accuracy": 0.4706
+        "n": 19,
+        "avg_confidence": 0.6987,
+        "accuracy": 0.6316
       },
       {
         "bin": [
           0.7333,
           0.8
         ],
-        "n": 26,
-        "avg_confidence": 0.7723,
-        "accuracy": 0.8077
+        "n": 12,
+        "avg_confidence": 0.7639,
+        "accuracy": 0.6667
       },
       {
         "bin": [
           0.8,
           0.8667
         ],
-        "n": 18,
-        "avg_confidence": 0.8298,
-        "accuracy": 0.6667
+        "n": 29,
+        "avg_confidence": 0.8463,
+        "accuracy": 0.7931
       },
       {
         "bin": [
           0.8667,
           0.9333
         ],
-        "n": 28,
-        "avg_confidence": 0.8949,
+        "n": 14,
+        "avg_confidence": 0.9029,
         "accuracy": 0.9286
       },
       {
@@ -195,8 +196,8 @@
           1.0
         ],
         "n": 42,
-        "avg_confidence": 0.9804,
-        "accuracy": 1.0
+        "avg_confidence": 0.9792,
+        "accuracy": 0.9524
       }
     ],
     "confusion_matrix": {
@@ -211,56 +212,56 @@
       ],
       "rows_truth": [
         [
-          18,
-          2,
-          4,
-          0,
-          1,
-          0,
-          0
-        ],
-        [
-          2,
-          21,
-          1,
-          0,
-          1,
-          0,
-          0
-        ],
-        [
-          2,
-          2,
           15,
+          2,
+          3,
           0,
-          3,
-          3,
+          5,
+          0,
           0
         ],
         [
           2,
+          20,
           1,
-          1,
-          16,
-          1,
-          4,
+          0,
+          2,
+          0,
           0
         ],
         [
-          0,
-          0,
           1,
-          0,
+          2,
           14,
-          10,
+          0,
+          6,
+          2,
+          0
+        ],
+        [
+          1,
+          1,
+          0,
+          15,
+          6,
+          2,
           0
         ],
         [
           0,
           0,
-          2,
           0,
-          2,
+          0,
+          20,
+          5,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          4,
           21,
           0
         ],
@@ -269,9 +270,9 @@
           0,
           1,
           0,
+          1,
           0,
-          0,
-          24
+          23
         ]
       ]
     }
@@ -281,6 +282,7 @@
     "reasons": [],
     "min_accuracy": 0.6,
     "max_ece": 0.1,
+    "min_melanoma_recall": 0.7,
     "min_n": 150
   },
   "failure_samples": []

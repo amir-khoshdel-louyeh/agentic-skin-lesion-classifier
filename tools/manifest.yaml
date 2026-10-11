@@ -141,7 +141,9 @@ tools:
     requires: [image, metadata]
     produces: [screening_verdict]
     modality: image+metadata
-    calibrated: true
+    # calibration/SUMMARY.md: acc 0.720, ECE 0.094, MEL recall 0.68
+    # — fails the melanoma-sensitivity gate.
+    calibrated: false
     vram_budget_gb: 2.0
     tier: tier3_high
     status: ready
@@ -154,7 +156,7 @@ tools:
     requires: [image]
     produces: [screening_verdict]
     modality: image
-    # calibration/SUMMARY.md: acc 0.669, ECE 0.058.
+    # calibration/SUMMARY.md: acc 0.646, ECE 0.078, MEL recall 0.80.
     calibrated: true
     vram_budget_gb: 1.5
     tier: tier2_mid
@@ -166,7 +168,7 @@ tools:
     requires: [image]
     produces: [screening_verdict]
     modality: image
-    # calibration/SUMMARY.md: acc 0.737, ECE 0.090.
+    # calibration/SUMMARY.md: acc 0.731, ECE 0.065, MEL recall 0.80.
     calibrated: true
     vram_budget_gb: 1.5
     tier: tier2_mid
@@ -178,7 +180,7 @@ tools:
     requires: [image]
     produces: [screening_verdict]
     modality: image
-    # calibration/SUMMARY.md: acc 0.709, ECE 0.094.
+    # calibration/SUMMARY.md: acc 0.720, ECE 0.079, MEL recall 0.80.
     calibrated: true
     vram_budget_gb: 2.0
     tier: tier3_high

@@ -47,8 +47,13 @@ fetched, WHERE from, and its integrity hash. No training performed.
 - Files: `best.pt` (state_dict + arch/classes/size), `meta.json`
   (splits, per-epoch loss/accuracy).
 - Calibration: `models/<name>/calibration.json` written by
-  `tools/calibrate.py --fit-temperature` on the disjoint calibration
-  split; `calibration/<tool>.json` holds the held-out metrics + gate.
+  `tools/fit_temperature.py` on the disjoint calibration split;
+  `calibration/<tool>.json` holds the held-out metrics + gate.
+- Sensitivity: the fit adds the SMALLEST melanoma logit bias that
+  reaches 0.75 melanoma recall on the calibration split, then refits
+  temperature by NLL. This is a decision-prior adjustment (no
+  retraining); `calibration/SUMMARY.md` records the resulting held-out
+  melanoma recall. The pool gate requires >= 0.70.
 - Rebuild: `.venv/bin/python tools/train_isic.py --arch <arch> --epochs 5`.
 
 ## models/medsam-vit-base/ — MedSAM boundary support [DOWNLOADED]

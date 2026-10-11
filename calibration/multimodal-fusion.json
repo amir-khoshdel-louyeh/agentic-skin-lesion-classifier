@@ -279,10 +279,12 @@
   "gate": {
     "passed": false,
     "reasons": [
-      "ece=0.1053 > 0.1"
+      "ece=0.1053 > 0.1",
+      "melanoma_recall=0.4400 < 0.7"
     ],
     "min_accuracy": 0.6,
     "max_ece": 0.1,
+    "min_melanoma_recall": 0.7,
     "min_n": 150
   },
   "failure_samples": [

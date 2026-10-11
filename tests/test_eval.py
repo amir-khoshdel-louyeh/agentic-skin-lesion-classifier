@@ -121,5 +121,19 @@ broken = ToolEntry(name="broken", command="tools/does_not_exist.py",
 check("benchmark-broken-tool-skipped",
       benchmark.predictions_for_tool(broken, ["ISIC_0000000"]) == {})
 
+# 8. The calibration gate requires melanoma sensitivity, not just accuracy.
+from tools.calibrate import gate  # noqa: E402
+
+base = {"n": 175, "accuracy": 0.70, "ece": 0.05,
+        "per_class": {"Melanoma": {"recall": 0.75}}}
+check("gate-accepts-calibrated-and-sensitive",
+      gate(base)["passed"] is True, str(gate(base)))
+blind = {**base, "per_class": {"Melanoma": {"recall": 0.50}}}
+check("gate-rejects-low-melanoma-recall",
+      gate(blind)["passed"] is False
+      and any("melanoma_recall" in reason
+              for reason in gate(blind)["reasons"]),
+      str(gate(blind)))
+
 print(f"{len(failures)} failures")
 raise SystemExit(1 if failures else 0)

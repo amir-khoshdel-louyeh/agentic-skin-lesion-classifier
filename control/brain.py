@@ -33,9 +33,9 @@ def diagnostic_pool(manifest) -> list[str]:
     """Hintable diagnostic names: ready + diagnostic, minus VLM/failed.
 
     A tool with a local calibration record that did not clear the 0.60
-    accuracy / 0.10 ECE gate stays OUT of the pool even though its CLI
-    still runs. With no calibration artifacts (fresh clone) nothing is
-    blocked, so the pool degrades to the manifest alone.
+    accuracy / 0.10 ECE / 0.70 melanoma-recall gate stays OUT of the pool
+    even though its CLI still runs. With no calibration artifacts (fresh
+    clone) nothing is blocked, so the pool degrades to the manifest alone.
     """
     from control.calibration import blocked_tools  # lazy: no cycle
 

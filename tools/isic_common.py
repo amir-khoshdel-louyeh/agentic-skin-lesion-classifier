@@ -53,45 +53,57 @@ def build_arch(arch: str, num_classes: int = len(CLASSES)) -> torch.nn.Module:
     return ARCHS[arch](weights=None, num_classes=num_classes)
 
 
-def temperature_for(model_dir: Path) -> tuple[float, str]:
-    """Fitted temperature from calibration.json, else identity."""
+def calibration_for(model_dir: Path) -> tuple[float, float, str]:
+    """Fitted (temperature, melanoma logit bias) from calibration.json.
+
+    The bias is a class-prior adjustment fitted for melanoma sensitivity;
+    both values default to identity when no calibration file exists.
+    """
     path = model_dir / "calibration.json"
     if path.exists():
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
-            value = float(payload.get("temperature"))
-            if value > 0:
-                return value, "calibration.json"
+            temperature = float(payload.get("temperature", 1.0))
+            bias = float(payload.get("melanoma_logit_bias", 0.0))
+            if temperature > 0:
+                return temperature, bias, "calibration.json"
         except (ValueError, TypeError, OSError):
             pass
-    return 1.0, "default"
+    return 1.0, 0.0, "default"
 
 
 def probabilities(model_dir: Path, image_path: str,
-                  device: torch.device | None = None) -> dict[str, float]:
+                  device: torch.device | None = None,
+                  temperature: float | None = None,
+                  melanoma_bias: float | None = None) -> dict[str, float]:
     """Class distribution in-process (build scripts: temperature fits).
 
-    Same checkpoint, transform and temperature lookup as the CLI path;
-    used by tools/fit_temperature.py so fitting 210 cases does not pay a
-    fresh interpreter + weight load per image.
+    Same checkpoint, transform, temperature and melanoma bias as the CLI
+    path. Pass temperature=1.0 / melanoma_bias=0.0 to get the raw scan
+    used for fitting. Used by tools/fit_temperature.py so fitting 210
+    cases does not pay a fresh interpreter + weight load per image.
     """
     device = device or torch.device(
         "cuda" if torch.cuda.is_available() else "cpu")
+    if temperature is None or melanoma_bias is None:
+        fitted_t, fitted_bias, _ = calibration_for(model_dir)
+        temperature = fitted_t if temperature is None else temperature
+        melanoma_bias = fitted_bias if melanoma_bias is None else melanoma_bias
     checkpoint = torch.load(str(model_dir / "best.pt"),
                             map_location=device, weights_only=False)
-    model = build_arch(checkpoint.get("arch", ""),
-                       len(checkpoint.get("classes", CLASSES)))
+    classes = list(checkpoint.get("classes", CLASSES))
+    model = build_arch(checkpoint.get("arch", ""), len(classes))
     try:
         model.load_state_dict(checkpoint["model"])
         model.to(device).eval()
-        temperature, _ = temperature_for(model_dir)
         image = ImageOps.exif_transpose(
             Image.open(image_path)).convert("RGB")
         inputs = eval_transform(int(checkpoint.get("size", 224))) (
             image).unsqueeze(0).to(device)  # noqa: E211 - shared helper
         with torch.no_grad():
-            probs = torch.softmax(model(inputs) / temperature, dim=1)[0]
-        classes = list(checkpoint.get("classes", CLASSES))
+            logits = model(inputs)
+            logits[0, classes.index("Melanoma")] += melanoma_bias
+            probs = torch.softmax(logits / temperature, dim=1)[0]
         return {classes[i]: float(probs[i]) for i in range(len(classes))}
     finally:
         del model
@@ -113,9 +125,11 @@ def main(tool_name: str, model_dir_name: str, tier: str,
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument("--image", dest="image_path", required=True)
     parser.add_argument("--metadata", dest="metadata", required=False)
-    # Calibration-only override: reproduces the uncalibrated scan used to
-    # fit T without editing the wrapper or the saved checkpoint.
+    # Calibration-only overrides: reproduce the uncalibrated scan used to
+    # fit T/bias without editing the wrapper or the saved checkpoint.
     parser.add_argument("--temperature", type=float, default=None,
+                        help=argparse.SUPPRESS)
+    parser.add_argument("--melanoma-bias", type=float, default=None,
                         help=argparse.SUPPRESS)
     args = parser.parse_args()
 
@@ -149,18 +163,21 @@ def main(tool_name: str, model_dir_name: str, tier: str,
         model.load_state_dict(checkpoint["model"])
         model.to(device).eval()
 
-        temperature, temp_source = temperature_for(model_dir)
+        temperature, melanoma_bias, temp_source = calibration_for(model_dir)
         if args.temperature is not None:
             temperature, temp_source = args.temperature, "override"
+        if args.melanoma_bias is not None:
+            melanoma_bias = args.melanoma_bias
 
         image = ImageOps.exif_transpose(
             Image.open(args.image_path)).convert("RGB")
         inputs = eval_transform(size)(image).unsqueeze(0).to(device)
+        classes = list(checkpoint.get("classes", CLASSES))
         with torch.no_grad():
             logits = model(inputs)
+            logits[0, classes.index("Melanoma")] += melanoma_bias
             probs = torch.softmax(logits / temperature, dim=1)[0]
 
-        classes = list(checkpoint.get("classes", CLASSES))
         dist = {classes[i]: float(probs[i]) for i in range(len(classes))}
         gate = entropy_gate(dist, entropy_threshold=DEFAULT_ENTROPY_THRESHOLD)
         idx = classes.index(gate["top_class"])
@@ -177,6 +194,7 @@ def main(tool_name: str, model_dir_name: str, tier: str,
             "entropy": gate["entropy"],
             "entropy_threshold": DEFAULT_ENTROPY_THRESHOLD,
             "temperature": temperature,
+            "melanoma_logit_bias": melanoma_bias,
             "temperature_source": temp_source,
             "uncertainty_flags": list(gate["uncertainty_flags"]),
             "metadata": metadata,

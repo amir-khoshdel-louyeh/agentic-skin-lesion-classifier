@@ -280,10 +280,12 @@
     "passed": false,
     "reasons": [
       "accuracy=0.5714 < 0.6",
-      "ece=0.1803 > 0.1"
+      "ece=0.1803 > 0.1",
+      "melanoma_recall=0.3600 < 0.7"
     ],
     "min_accuracy": 0.6,
     "max_ece": 0.1,
+    "min_melanoma_recall": 0.7,
     "min_n": 150
   },
   "failure_samples": []

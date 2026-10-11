@@ -1,10 +1,10 @@
-"""Fit temperature scaling for one fine-tuned ISIC2019 model.
+"""Fit sensitivity calibration for one fine-tuned ISIC2019 model.
 
 Build script (not a manifest tool). Runs the deployed checkpoint on the
-disjoint calibration split in one process, fits T by NLL grid search via
-control.calibration.fit_temperature, and writes
-`models/<name>/calibration.json` — the file `tools/isic_common.py` reads
-before serving a prediction.
+disjoint calibration split in one process, fits the smallest melanoma
+logit bias that reaches the target melanoma recall, refits temperature by
+NLL on the adjusted logits, and writes `models/<name>/calibration.json` —
+the file `tools/isic_common.py` reads before serving a prediction.
 
 Usage:
   .venv/bin/python tools/fit_temperature.py --model-dir models/isic-resnet50
@@ -20,7 +20,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from control.calibration import fit_temperature  # noqa: E402
+from control.calibration import fit_sensitive_calibration  # noqa: E402
 from control.eval import image_path_for_stem, split_for_training  # noqa: E402
 from tools.isic_common import probabilities  # noqa: E402
 
@@ -30,6 +30,7 @@ def main() -> int:
         description="Fit temperature scaling on the calibration split.")
     parser.add_argument("--model-dir", required=True)
     parser.add_argument("--per-class", type=int, default=30)
+    parser.add_argument("--target-melanoma-recall", type=float, default=0.75)
     parser.add_argument("--out", default="")
     args = parser.parse_args()
 
@@ -46,11 +47,14 @@ def main() -> int:
         image = image_path_for_stem(stem)
         if image is None:
             continue
-        probs_by_stem[stem] = probabilities(model_dir, str(image))
+        probs_by_stem[stem] = probabilities(
+            model_dir, str(image), temperature=1.0, melanoma_bias=0.0)
         if i % 50 == 0:
             print(f"  {i}/{len(calibration)}", flush=True)
 
-    fit = fit_temperature(probs_by_stem, dict(calibration))
+    fit = fit_sensitive_calibration(
+        probs_by_stem, dict(calibration),
+        target_recall=args.target_melanoma_recall)
     if not fit.get("ok"):
         raise SystemExit(f"Fit failed: {fit.get('reason')}")
     fit.update({"tool": model_dir.name, "split": "calibration",
@@ -58,8 +62,11 @@ def main() -> int:
                 "generated_at": datetime.now(timezone.utc).isoformat()})
     out = Path(args.out) if args.out else model_dir / "calibration.json"
     out.write_text(json.dumps(fit, indent=2))
-    print(f"T={fit['temperature']} NLL {fit['nll_before']} -> "
-          f"{fit['nll_after']} (n={fit['n']}); wrote {out}")
+    print(f"bias={fit['melanoma_logit_bias']} T={fit['temperature']} "
+          f"MEL recall {fit['calibration_melanoma_recall']} "
+          f"acc {fit['calibration_accuracy']} "
+          f"NLL {fit['nll_before']} -> {fit['nll_after']} "
+          f"(n={fit['n']}); wrote {out}")
     return 0
 
 

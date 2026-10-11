@@ -43,18 +43,25 @@ pool = diagnostic_pool(manifest)
 record = {"image_path": "dataset/ISIC2019_test/ISIC_0000002.jpg",
           "metadata": {"patient_id": "A001", "age": 60, "sex": "female"}}
 case_text = render_subset_for_case(manifest, tuple(pool), record)
+# Optionally a metadata tool for the renderer checks below; the pool may
+# contain none of them after a calibration change.
+meta_case = render_subset_for_case(manifest, ("multimodal-fusion",), record)
 
 # 1. Pre-rendered lines: complete, runnable, nothing to fill in.
 check("lines-have-real-image",
       "dataset/ISIC2019_test/ISIC_0000002.jpg" in case_text)
 check("lines-have-real-metadata",
-      '"patient_id": "A001"' in case_text or '"patient_id":"A001"' in
-      case_text.replace(" ", ""))
-meta_lines = [line for line in case_text.splitlines()
-              if "ensemble-high" in line]
+      '"patient_id": "A001"' in meta_case or '"patient_id":"A001"' in
+      meta_case.replace(" ", ""))
+# The renderer fills --metadata for metadata-requiring tools. The
+# calibrated pool may contain none of them at a given time, so exercise
+# the renderer directly with a known metadata tool instead of assuming
+# membership.
+meta_lines = [line for line in meta_case.splitlines()
+              if "multimodal-fusion" in line]
 check("lines-need-metadata-only-where-required",
       bool(meta_lines) and "--metadata" in meta_lines[0],
-      "ensemble-high (metadata tool) line missing")
+      "metadata tool line missing")
 cmd_lines = [line for line in case_text.splitlines()
              if line.startswith("- ")]
 check("lines-no-placeholders", all("<path" not in line

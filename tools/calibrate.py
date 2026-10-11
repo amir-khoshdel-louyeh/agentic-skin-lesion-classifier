@@ -7,10 +7,13 @@ recall/precision, a 7x7 confusion matrix, ECE/MCE reliability bins, and
 
 Gate: a tool enters the production pool only if
   * it produced predictions on the full split,
-  * accuracy >= MIN_ACCURACY (0.60), and
-  * ECE <= MAX_ECE (0.10).
-Failures are written with passed=false and control.brain.diagnostic_pool
-drops them.
+  * accuracy >= MIN_ACCURACY (0.60),
+  * ECE <= MAX_ECE (0.10), and
+  * melanoma recall >= MIN_MELANOMA_RECALL (0.70).
+The melanoma bar is separate from aggregate accuracy: a model can look
+accurate while almost never flagging melanoma (the initial B4/ResNet
+fits sat at 0.52-0.56). Failures are written with passed=false and
+control.brain.diagnostic_pool drops them.
 
 Temperature scaling (`--fit-temperature`) runs the same tools at T=1.0
 on a disjoint calibration split, fits T by NLL grid search, and writes
@@ -41,6 +44,7 @@ if str(BASE_DIR) not in sys.path:
 from control.calibration import (  # noqa: E402
     MAX_ECE,
     MIN_ACCURACY,
+    MIN_MELANOMA_RECALL,
     fit_temperature,
 )
 from control.eval import (heldout_split, image_path_for_stem,  # noqa: E402
@@ -125,6 +129,7 @@ def run_tool(tool, cases, metadata, temperature, timeout,
             "probs": ({k: float(v) for k, v in probs.items()}
                       if isinstance(probs, dict) else None),
             "temperature": payload.get("temperature"),
+            "melanoma_bias": payload.get("melanoma_logit_bias"),
             "flags": payload.get("uncertainty_flags") or [],
         }
         if progress and i % 25 == 0:
@@ -241,6 +246,8 @@ def metrics(predictions: dict, truth: dict) -> dict:
 
 def gate(metrics_payload: dict) -> dict:
     reasons = []
+    mel_recall = (metrics_payload.get("per_class", {})
+                  .get("Melanoma", {}).get("recall", 0.0))
     if metrics_payload["n"] < MIN_N:
         reasons.append(f"n={metrics_payload['n']} < {MIN_N}")
     if metrics_payload["accuracy"] < MIN_ACCURACY:
@@ -248,8 +255,12 @@ def gate(metrics_payload: dict) -> dict:
                        f"< {MIN_ACCURACY}")
     if metrics_payload["ece"] > MAX_ECE:
         reasons.append(f"ece={metrics_payload['ece']:.4f} > {MAX_ECE}")
+    if mel_recall < MIN_MELANOMA_RECALL:
+        reasons.append(f"melanoma_recall={mel_recall:.4f} "
+                       f"< {MIN_MELANOMA_RECALL}")
     return {"passed": not reasons, "reasons": reasons,
             "min_accuracy": MIN_ACCURACY, "max_ece": MAX_ECE,
+            "min_melanoma_recall": MIN_MELANOMA_RECALL,
             "min_n": MIN_N}
 
 
@@ -258,16 +269,19 @@ def summarize(results: dict[str, dict]) -> str:
              f"Generated: {datetime.now(timezone.utc).isoformat()}",
              "",
              f"Gate: n >= {MIN_N}, accuracy >= {MIN_ACCURACY}, "
-             f"ECE <= {MAX_ECE}. Tools that fail stay out of the pool.", "",
-             "| tool | n | accuracy | balanced acc | ECE | mean conf | gate |",
-             "|------|---|----------|--------------|-----|-----------|------|"]
+             f"ECE <= {MAX_ECE}, melanoma recall >= {MIN_MELANOMA_RECALL}. "
+             "Tools that fail stay out of the pool.", "",
+             "| tool | n | accuracy | balanced acc | ECE | MEL recall | "
+             "gate |",
+             "|------|---|----------|--------------|-----|------------|------|"]
     for name, payload in results.items():
         m = payload["metrics"]
         ok = payload["gate"]["passed"]
+        mel = m["per_class"]["Melanoma"]["recall"]
         lines.append(
             f"| {name} | {m['n']} | {m['accuracy']:.4f} | "
             f"{m['balanced_accuracy']:.4f} | {m['ece']:.4f} | "
-            f"{m['mean_confidence']:.4f} | {'PASS' if ok else 'FAIL'} |")
+            f"{mel:.4f} | {'PASS' if ok else 'FAIL'} |")
     lines += ["", "## Per-class recall", ""]
     for name, payload in results.items():
         m = payload["metrics"]
@@ -316,6 +330,11 @@ def main() -> int:
         results = {}
         for path in sorted(json_dir.glob("*.json")):
             payload = json.loads(path.read_text())
+            # Re-evaluate the gate against the stored evidence: the
+            # criteria (e.g. melanoma recall) can tighten without
+            # re-running a single inference pass.
+            payload["gate"] = gate(payload["metrics"])
+            path.write_text(json.dumps(payload, indent=2))
             results[payload.get("tool", path.stem)] = payload
         if not results:
             raise SystemExit(f"No calibration JSON in {json_dir}")
@@ -376,6 +395,8 @@ def main() -> int:
         m = metrics(predictions, truth)
         temps = {v["temperature"] for v in predictions.values()
                  if v.get("temperature") is not None}
+        biases = {v["melanoma_bias"] for v in predictions.values()
+                  if v.get("melanoma_bias") is not None}
         payload = {
             "tool": tool.name,
             "command": tool.command,
@@ -385,14 +406,18 @@ def main() -> int:
                              "failures": len(failures)},
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "temperature": sorted(temps)[0] if len(temps) == 1 else None,
+            "melanoma_logit_bias": (sorted(biases)[0]
+                                    if len(biases) == 1 else None),
             "metrics": m,
             "gate": gate(m),
             "failure_samples": failures[:5],
         }
         (json_dir / f"{tool.name}.json").write_text(
             json.dumps(payload, indent=2))
+        mel = m["per_class"]["Melanoma"]["recall"]
         print(f"  {tool.name}: n={m['n']} acc={m['accuracy']:.4f} "
               f"bal={m['balanced_accuracy']:.4f} ece={m['ece']:.4f} "
+              f"MEL={mel:.4f} "
               f"-> {'PASS' if payload['gate']['passed'] else 'FAIL'}"
               f" ({len(failures)} failures)", flush=True)
         return payload

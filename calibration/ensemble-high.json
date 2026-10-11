@@ -277,10 +277,13 @@
     }
   },
   "gate": {
-    "passed": true,
-    "reasons": [],
+    "passed": false,
+    "reasons": [
+      "melanoma_recall=0.6800 < 0.7"
+    ],
     "min_accuracy": 0.6,
     "max_ece": 0.1,
+    "min_melanoma_recall": 0.7,
     "min_n": 150
   },
   "failure_samples": []
