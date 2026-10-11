@@ -14,12 +14,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+import yaml  # noqa: E402
+
 import benchmark  # noqa: E402
 from control.eval import (  # noqa: E402
     PROMPT_STEMS,
     heldout_split,
     image_path_for_stem,
     load_ground_truth,
+    prompt_stems,
     score,
 )
 from control.manifest import load_manifest  # noqa: E402
@@ -57,6 +60,19 @@ held_stems = {s for s, _ in held1}
 check("split-disjoint", not (fit_stems & held_stems))
 check("split-excludes-prompts", not ({s for s, _ in fit1} & PROMPT_STEMS)
       and not ({s for s, _ in held1} & PROMPT_STEMS))
+# The literal list went stale once (8 of 24 demo images were missing, so
+# ISIC_0025504 leaked into held-out), so the real invariant is checked
+# against prompt.yaml itself, not against the constant.
+prompt_yaml_stems = {
+    Path(rec["image_path"]).stem
+    for rec in yaml.safe_load((ROOT / "prompt.yaml").read_text(encoding="utf-8"))
+}
+demo = prompt_stems()
+check("prompt-stems-derives-from-prompt-yaml", prompt_yaml_stems <= demo,
+      str(sorted(prompt_yaml_stems - demo)))
+check("split-excludes-prompt-yaml-stems",
+      not (fit_stems & demo) and not (held_stems & demo),
+      str(sorted((fit_stems | held_stems) & demo)))
 check("split-nonempty", len(held1) > 0 and len(fit1) > 0,
       f"held={len(held1)} fit={len(fit1)}")
 per_class: dict[str, int] = {}

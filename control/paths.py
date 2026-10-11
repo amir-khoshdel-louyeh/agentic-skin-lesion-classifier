@@ -39,6 +39,11 @@ def startup_path_check(root: Path = ROOT_DIR) -> None:
             continue
         if ".venv" in path.parts or ".git" in path.parts:
             continue
+        # Runtime artifacts (git-ignored per README): LLM reasoning quoted
+        # inside reports may contain absolute workspace paths — never block
+        # a round on those.
+        if "report" in path.parts:
+            continue
         try:
             hits = find_absolute_literals(
                 path.read_text(encoding="utf-8", errors="replace")

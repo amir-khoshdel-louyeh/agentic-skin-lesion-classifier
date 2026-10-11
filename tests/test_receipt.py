@@ -70,5 +70,20 @@ check("omitted-numbers-filled",
       and omitted.confidence == conf
       and "reliability=omitted" in omitted.reasoning)
 
+# A command naming a tool the sessions were NOT offered (the VLM tiers) is
+# a hallucinated command, never evidence: it could otherwise vote and pull
+# a 5-6 GB model onto the 8 GB card. Rejected before any execution.
+for excluded_tool in ("tools/vlm_ollama.py", "tools/drdiag_vlm.py",
+                      "tools/quality_gate.py"):
+    bad = VerdictEnvelope(
+        ran=True,
+        command=f"python {excluded_tool} --image "
+                "dataset/ISIC2019_test/ISIC_0000000.jpg",
+        exit_code=0, reasoning="t", uncertainty_flags=[])
+    rejected = verify_receipt(bad, record, manifest)
+    check(f"excluded-tool-rejected:{excluded_tool}",
+          rejected.ran is False and rejected.predicted_class is None
+          and "diagnostic pool" in rejected.reasoning, str(rejected))
+
 print(f"{len(failures)} failures")
 raise SystemExit(1 if failures else 0)

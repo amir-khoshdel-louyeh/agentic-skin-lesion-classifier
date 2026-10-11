@@ -69,6 +69,17 @@ COMMAND_FORM_RULE = (
     "is NOT a command."
 )
 
+# Scratch directory for the Quality Agent's preprocess output. Lives under
+# report/ (git-ignored runtime artifacts) and resolves relative to ROOT_DIR
+# in control.quality.resolve_cleaned_image.
+CLEANED_DIR = "report/cleaned"
+
+
+def cleaned_output_path(record: dict) -> str:
+    """Stable scratch path for a case's cleaned image."""
+    stem = Path(str(record.get("image_path") or "")).stem
+    return f"{CLEANED_DIR}/{stem or 'case'}_cleaned.jpg"
+
 
 def render_subset_for_case(manifest: Manifest, names: tuple[str, ...],
                            record: dict) -> str:
@@ -79,6 +90,10 @@ def render_subset_for_case(manifest: Manifest, names: tuple[str, ...],
     Sessions choose 1..n LINES freely but run them EXACTLY (copy-paste):
     nothing left to retype, rename, or misquote. Unknown names raise
     KeyError (fail fast).
+
+    Non-`--image` arguments are filled too (preprocess needs `--output`),
+    so a role never has to construct a path itself — the Quality Agent's
+    hand-built paths were the source of its observed path failures.
     """
     import json as _json
 
@@ -98,6 +113,8 @@ def render_subset_for_case(manifest: Manifest, names: tuple[str, ...],
         cmd = f"python {tool.command} --image {image}"
         if "metadata" in tool.requires:
             cmd += f" --metadata '{metadata}'"
+        if tool.category == "preprocessing":
+            cmd += f" --output {cleaned_output_path(record)}"
         lines.append(f"- {tool.name}: `{cmd}`")
     return "\n".join(lines)
 

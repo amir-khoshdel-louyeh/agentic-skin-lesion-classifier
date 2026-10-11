@@ -25,8 +25,7 @@ from control.guard import run_guard
 from control.brain import (MAX_SESSIONS, diagnostic_pool, receipt_summary,
                        run_brain_step, run_specialist_briefs,
                        session_tools)
-from control.manifest import (load_manifest, render_subset,
-                                render_subset_for_case)
+from control.manifest import load_manifest, render_subset_for_case
 from control.paths import resolve, startup_path_check
 from control.prompts import effective_thresholds
 from control.quality import (QUALITY_TOOLKIT, quality_line,
@@ -86,6 +85,12 @@ def verify_receipt(
         )
     except StopIteration:
         return rejected(f"unknown or non-ready tool: {tool_rel}")
+    # The referee must count exactly what the sessions were offered: a
+    # verdict from a tool the pool excludes (the VLM tiers, support
+    # tools) is a hallucinated command, never evidence — otherwise an
+    # excluded tool could vote and pull a 5-6 GB model onto the GPU.
+    if tool.name not in set(diagnostic_pool(manifest)):
+        return rejected(f"tool not in the diagnostic pool: {tool_rel}")
     record_image = str(resolve(str(record.get("image_path"))))
     if str(resolve(image_arg)) != record_image:
         return rejected("image path does not match the record")
@@ -249,8 +254,12 @@ def run_round(
     # critic flags + audit (they never decide anything); the Quality
     # verdict is the agent voice that T3 (Brain-loop) will steer on.
     _t0 = _time.perf_counter()
-    quality = run_quality(record, render_subset(manifest, QUALITY_TOOLKIT),
-                          agent_id=agent_id)
+    # Same pre-rendered EXACT lines the diagnostic sessions get: the real
+    # case image (and preprocess's --output) already filled in, so the
+    # Quality Agent has no path to construct itself.
+    quality = run_quality(
+        record, render_subset_for_case(manifest, QUALITY_TOOLKIT, record),
+        agent_id=agent_id)
     timings["quality_s"] = round(_time.perf_counter() - _t0, 2)
     _emit("quality", {"verdict": quality.get("verdict"),
                       "reasons": quality.get("reasons", [])})

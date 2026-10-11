@@ -11,6 +11,8 @@ import csv
 import random
 from pathlib import Path
 
+import yaml
+
 from control.paths import ROOT_DIR
 from control.schemas import HAM10000_CLASSES
 
@@ -19,12 +21,39 @@ HELDOUT_PER_CLASS = 25
 
 # Demo images (prompt.yaml) — excluded from every fit pool: they are the
 # showcase set, and they sit inside the training table (leakage if scored).
+# `prompt_stems()` unions this list with the stems actually present in
+# prompt.yaml, because the constant went stale: prompt.yaml grew to 24
+# records while the literal kept 16, so 8 showcase images leaked back into
+# the "honest" split (ISIC_0025504 landed in held-out).
 PROMPT_STEMS = {
     "ISIC_0000000", "ISIC_0000001", "ISIC_0000002", "ISIC_0000003",
     "ISIC_0000013", "ISIC_0000074", "ISIC_0024345", "ISIC_0025302",
     "ISIC_0025509", "ISIC_0025513", "ISIC_0025758", "ISIC_0025767",
     "ISIC_0025781", "ISIC_0056166", "ISIC_0056176", "ISIC_0056302",
 }
+
+def prompt_stems(root: Path = ROOT_DIR) -> set[str]:
+    """Demo-image stems: the vendored list plus every stem in prompt.yaml.
+
+    Deriving from prompt.yaml keeps the
+    "demo images never enter fit or held-out" invariant from going stale
+    as cases are added. Unreadable/invalid prompt.yaml degrades to the
+    vendored literals (never a crash, never a silent empty set).
+    """
+    stems = set(PROMPT_STEMS)
+    try:
+        records = yaml.safe_load(
+            (root / "prompt.yaml").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return stems
+    for record in records or []:
+        if not isinstance(record, dict):
+            continue
+        image = record.get("image_path")
+        if isinstance(image, str) and image.strip():
+            stems.add(Path(image).stem)
+    return stems
+
 
 DX_TO_CLASS = {
     "MEL": "Melanoma",
@@ -109,9 +138,10 @@ def heldout_split(
     7-class label and are excluded from both (out-of-coverage, §10.3).
     """
     gt = load_ground_truth(root)
+    demo_stems = prompt_stems(root)
     by_class: dict[str, list[str]] = {}
     for stem, label in gt.items():
-        if stem in PROMPT_STEMS:
+        if stem in demo_stems:
             continue
         if image_path_for_stem(stem, root) is None:
             continue

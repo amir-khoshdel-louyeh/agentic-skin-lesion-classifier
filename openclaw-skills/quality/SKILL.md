@@ -24,9 +24,15 @@ python tools/abcde_analyzer.py --image <path_to_image>
 - `abcde_analyzer`: read-only context (shape/color heuristic). Its output
   informs quality wording only — never a diagnosis.
 
-When you clean, write the copy to a stable scratch path you choose and
-report that exact path as `cleaned_image` — the path must exist on disk,
-and downstream sessions may run their tools on it (never a placeholder).
+Your session brief carries the same EXACT pre-filled lines the
+diagnostic sessions get: the real case image is already in them, and the
+`preprocess` line already carries a concrete `--output` path. Run a line
+EXACTLY as written — never construct or retype a path yourself, and
+never substitute `<path>`-style placeholders.
+
+When you clean, report that line's exact `--output` path as
+`cleaned_image` — the path must exist on disk, and downstream sessions
+may run their tools on it (never a placeholder).
 
 ## Output
 

@@ -17,7 +17,10 @@ timm>=0.9.0
 # Computer Vision & Image Augmentation
 opencv-python>=4.9
 albumentations>=1.4
-pillow>=10.3,<11.0
+# >= 12.1: tools/ham10000_cnn.py and tools/skin_lesion_fast.py use
+# Image.get_flattened_data(), added in Pillow 12.1.0 (getdata() is
+# deprecated and goes away in Pillow 14).
+pillow>=12.1
 
 # API, Web, and Networking
 fastapi>=0.110

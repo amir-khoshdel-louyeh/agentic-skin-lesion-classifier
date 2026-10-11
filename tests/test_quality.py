@@ -13,7 +13,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from control.manifest import load_manifest, render_subset  # noqa: E402
+from control.manifest import (  # noqa: E402
+    load_manifest,
+    render_subset,
+    render_subset_for_case,
+)
 from control.prompts import load_role  # noqa: E402
 from control.quality import (  # noqa: E402
     FAILSAFE_CITE,
@@ -174,6 +178,25 @@ if skill.exists():
 # 7. Chain step 1 wiring: orchestrator spawns Quality first, audits it.
 orch_text = (ROOT / "orchestrator.py").read_text(encoding="utf-8")
 check("orchestrator-runs-quality", "run_quality(" in orch_text)
+# Chain step 1 must get the same pre-filled EXACT lines the diagnostic
+# sessions get: the Quality Agent's hand-built paths (placeholder
+# <path>, then a workspace-absolute path) were its observed failure mode.
+check("orchestrator-quality-exact-lines",
+      "render_subset_for_case(manifest, QUALITY_TOOLKIT" in orch_text,
+      "Quality Agent still receives placeholder <path> lines")
+quality_case_text = render_subset_for_case(
+    manifest, QUALITY_TOOLKIT,
+    {"image_path": "dataset/ISIC2019_test/ISIC_0000002.jpg",
+     "metadata": {"age": 60}})
+quality_lines = [line for line in quality_case_text.splitlines()
+                 if line.startswith("- ")]
+check("quality-lines-no-placeholders",
+      quality_lines and all("<path" not in line for line in quality_lines),
+      quality_case_text)
+check("quality-lines-real-image",
+      "dataset/ISIC2019_test/ISIC_0000002.jpg" in quality_case_text)
+check("quality-preprocess-has-output", "--output" in quality_case_text,
+      quality_case_text)
 check("orchestrator-quality-audit", '"quality": quality' in orch_text
       or "'quality': quality" in orch_text or '"quality":' in orch_text)
 check("orchestrator-quality-timing", '"quality_s"' in orch_text
