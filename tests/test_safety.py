@@ -60,6 +60,11 @@ heavy = [t for t in manifest.tools
 check("heavy-tools-exist", len(heavy) >= 5, str(len(heavy)))
 for tool in heavy:
     src = (ROOT / tool.command).read_text(encoding="utf-8")
+    # Thin wrappers delegate to a shared inference module; follow it so
+    # the guard is checked where it actually lives.
+    if "from tools.isic_common import" in src:
+        src += (ROOT / "tools" / "isic_common.py").read_text(
+            encoding="utf-8")
     if "import torch" in src or "from torch" in src:
         ok = "vram_check" in src or "vram.check" in src
     else:

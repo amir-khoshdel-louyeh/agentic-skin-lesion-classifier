@@ -18,7 +18,8 @@ tools:
     requires: [image]
     produces: [screening_verdict]
     modality: image
-    calibrated: true
+    # calibration/SUMMARY.md: acc 0.571, ECE 0.180 — fails the gate.
+    calibrated: false
     vram_budget_gb: 1.5
     tier: tier2_mid
 
@@ -29,7 +30,8 @@ tools:
     requires: [image]
     produces: [screening_verdict]
     modality: image
-    calibrated: true
+    # calibration/SUMMARY.md: acc 0.669, ECE 0.129 — fails the gate.
+    calibrated: false
     vram_budget_gb: 2.0
     tier: tier3_high
 
@@ -71,7 +73,8 @@ tools:
     requires: [image, metadata]
     produces: [screening_verdict]
     modality: image+metadata
-    calibrated: true
+    # calibration/SUMMARY.md: acc 0.644, ECE 0.105 — fails the gate.
+    calibrated: false
     vram_budget_gb: 1.0
     tier: tier2_mid
     status: ready
@@ -126,7 +129,8 @@ tools:
     requires: [image]
     produces: [screening_verdict]
     modality: image
-    calibrated: true
+    # calibration/SUMMARY.md: acc 0.571, ECE 0.180 — fails the gate.
+    calibrated: false
     vram_budget_gb: 1.0
     tier: tier2_mid
     status: ready
@@ -151,4 +155,54 @@ tools:
     calibrated: true
     vram_budget_gb: 2.0
     tier: tier3_high
+    status: ready
+
+  # Locally fine-tuned on ISIC2019 (7 covered classes; SCC excluded).
+  # Weights are git-ignored; tools/train_isic.py rebuilds them.
+  - name: isic-efficientnet-b4
+    command: tools/isic_efficientnet_b4.py
+    category: diagnostic
+    requires: [image]
+    produces: [screening_verdict]
+    modality: image
+    # calibration/SUMMARY.md: acc 0.669, ECE 0.058.
+    calibrated: true
+    vram_budget_gb: 1.5
+    tier: tier2_mid
+    status: ready
+
+  - name: isic-resnet50
+    command: tools/isic_resnet50.py
+    category: diagnostic
+    requires: [image]
+    produces: [screening_verdict]
+    modality: image
+    # calibration/SUMMARY.md: acc 0.737, ECE 0.090.
+    calibrated: true
+    vram_budget_gb: 1.5
+    tier: tier2_mid
+    status: ready
+
+  - name: isic-vit
+    command: tools/isic_vit.py
+    category: diagnostic
+    requires: [image]
+    produces: [screening_verdict]
+    modality: image
+    # calibration/SUMMARY.md: acc 0.709, ECE 0.094.
+    calibrated: true
+    vram_budget_gb: 2.0
+    tier: tier3_high
+    status: ready
+
+  # Support tier: boundary evidence, not a vote. MedSAM (SAM ViT-B).
+  - name: lesion-segmentation
+    command: tools/lesion_segmentation.py
+    category: analysis
+    requires: [image]
+    produces: [lesion_mask, segmentation_metrics]
+    modality: image
+    calibrated: false
+    vram_budget_gb: 3.0
+    tier: support
     status: ready

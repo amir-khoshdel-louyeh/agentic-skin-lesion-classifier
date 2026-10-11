@@ -9,6 +9,7 @@ calibration artifacts keeps working, and only measured failures gate.
 """
 
 import json
+import math
 from pathlib import Path
 
 from control.paths import ROOT_DIR
@@ -45,3 +46,34 @@ def blocked_tools(root: Path = ROOT_DIR) -> set[str]:
     """Names with a calibration record that did not pass the gate."""
     return {name for name, record in load_registry(root).items()
             if not passed(record)}
+
+
+def fit_temperature(probs_by_stem: dict[str, dict],
+                    truth: dict[str, str]) -> dict:
+    """Fit T by NLL grid search on probabilities collected at T=1.0.
+
+    `log(p)` equals the logits up to an additive constant, which softmax
+    ignores, so scaling `log(p)` by 1/T is temperature scaling without
+    needing raw logits from the tool.
+    """
+    usable = {stem: probs for stem, probs in probs_by_stem.items()
+              if stem in truth and truth[stem] in probs}
+    if len(usable) < 30:
+        return {"ok": False, "reason": "not enough probability rows"}
+
+    def nll(temperature: float) -> float:
+        total = 0.0
+        for stem, probs in usable.items():
+            scaled = {c: math.log(max(p, 1e-12)) / temperature
+                      for c, p in probs.items()}
+            top = max(scaled.values())
+            norm = top + math.log(sum(math.exp(v - top)
+                                      for v in scaled.values()))
+            total += -(scaled[truth[stem]] - norm)
+        return total / len(usable)
+
+    grid = [0.25 * (1.05 ** i) for i in range(90)]
+    best_nll, best_t = min((nll(t), t) for t in grid)
+    return {"ok": True, "temperature": round(best_t, 3),
+            "n": len(usable), "nll_before": round(nll(1.0), 4),
+            "nll_after": round(best_nll, 4)}

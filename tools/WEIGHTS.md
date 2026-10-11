@@ -36,6 +36,29 @@ fetched, WHERE from, and its integrity hash. No training performed.
   (exceeds the 2 GB standard tool budget; sequential schedule only).
 - Status: wrapper pending (transformers Qwen2-VL path).
 
+## models/isic-* — ISIC2019 7-class fine-tunes [TRAINED LOCALLY]
+- Tools: isic-efficientnet-b4, isic-resnet50, isic-vit (ViT-B/16),
+  isic-ensemble (mean of the three).
+- Data: `dataset/ISIC2019_full` (SCC excluded — out of the 7-class
+  coverage). Splits from `control.eval.split_for_training`: train never
+  sees calibration/validation/held-out, and demo stems stay excluded.
+- Init: torchvision ImageNet weights (efficientnet_b4, resnet50, vit_b_16).
+  No external fine-tuned checkpoint; no API, no LLM.
+- Files: `best.pt` (state_dict + arch/classes/size), `meta.json`
+  (splits, per-epoch loss/accuracy).
+- Calibration: `models/<name>/calibration.json` written by
+  `tools/calibrate.py --fit-temperature` on the disjoint calibration
+  split; `calibration/<tool>.json` holds the held-out metrics + gate.
+- Rebuild: `.venv/bin/python tools/train_isic.py --arch <arch> --epochs 5`.
+
+## models/medsam-vit-base/ — MedSAM boundary support [DOWNLOADED]
+- Source: https://huggingface.co/wanglab/medsam-vit-base
+- License: Apache-2.0. Files: config/preprocessor JSONs +
+  pytorch_model.bin (358 MB total).
+- Prompt: a central box (8–92% of each side); the best of the three
+  candidate masks by the model's own IoU score. Support tier only — it
+  produces a mask and boundary metrics, never a class vote.
+
 ## models/multimodal/ — multimodal mid tier [DOWNLOADED, VERIFIED]
 - Source: https://huggingface.co/cesaraha/ham10000-multimodal-skin-lesion
   (Apache-2.0) + arch notebook from

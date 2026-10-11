@@ -46,6 +46,14 @@ ARCHS = {
     "vit_b_16": (models.vit_b_16, 24),
 }
 
+# Output directories match the manifest/tool names (kebab-case), not the
+# torchvision architecture identifiers.
+ARCH_DIRS = {
+    "efficientnet_b4": "isic-efficientnet-b4",
+    "resnet50": "isic-resnet50",
+    "vit_b_16": "isic-vit-b16",
+}
+
 
 class SkinDataset(Dataset):
     def __init__(self, cases: list[tuple[str, str]], transform):
@@ -141,7 +149,7 @@ def main() -> int:
         print("CUDA not available; refusing to train on CPU.")
         return 1
 
-    out_dir = Path(args.out or (BASE_DIR / "models" / f"isic-{args.arch}"))
+    out_dir = Path(args.out or (BASE_DIR / "models" / ARCH_DIRS[args.arch]))
     out_dir.mkdir(parents=True, exist_ok=True)
 
     train_cases, cal_cases, val_cases, heldout = split_for_training()
