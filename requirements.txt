@@ -1,35 +1,61 @@
 # ==============================================================================
-# WARNING: Please make sure the following libraries are compatible with your system. 
-# Otherwise, use the version that is compatible with your system.
+# Versions below were verified on the machine this build was validated on:
+# Python 3.14.8, NVIDIA RTX 5070 Laptop GPU (8 GB), CUDA 13.4, on 2026-10-16.
+# Each entry records the exact version that ran ("# verified ..."); the
+# requirement itself is a lower bound, so a newer compatible release is fine.
+#
+# This file previously pinned versions that contradicted that working
+# environment (numpy <2.0, pandas <3.0, transformers ==4.48.0,
+# pydantic ==2.7.1, pyyaml ==6.0.1, pillow <11.0, opencv-python vs the
+# installed headless build) and listed packages no code imports, so a clean
+# `pip install -r requirements.txt` produced an environment the tools could
+# not run in. Keep the floors aligned with what is actually tested.
 # ==============================================================================
 
 # Core Data Science & Data Manipulation
-numpy>=1.26,<2.0
-pandas>=2.2,<3.0
+numpy>=1.26          # verified 2.5.3
+pandas>=2.2          # verified 3.0.5
 
-# Deep Learning Ecosystem (Nightly builds for sm_120 compatibility)
-torch
-torchvision
-torchaudio
-transformers==4.48.0
-timm>=0.9.0
+# Deep Learning Ecosystem (nightly/cu130 wheels for sm_120 compatibility).
+# torch/torchvision stay unpinned on purpose: exact pins are wheel- and
+# GPU-specific, and the README install line pulls the matching build for the
+# host.
+torch                # verified 2.14.0+cu130
+torchvision          # verified 0.29.0+cu130
+# torchaudio is absent on purpose: no module imports it (this is a dermoscopy
+# image pipeline, not an audio one) and it is not part of the verified
+# environment. Re-add it when a tool actually uses it.
+# AutoImageProcessor + EfficientNetForImageClassification (tools/
+# skin_lesion_mid.py, tools/dermai_b0.py) and AutoProcessor +
+# Qwen2VLForConditionalGeneration (tools/drdiag_vlm.py) all exist and were
+# exercised end to end on 5.17.0.
+transformers>=4.48   # verified 5.17.0
 
 # Computer Vision & Image Augmentation
-opencv-python>=4.9
-albumentations>=1.4
+# headless build: matches the README install line and needs no GUI libraries.
+opencv-python-headless>=4.9   # verified 5.0.0.93
 # >= 12.1: tools/ham10000_cnn.py and tools/skin_lesion_fast.py use
 # Image.get_flattened_data(), added in Pillow 12.1.0 (getdata() is
 # deprecated and goes away in Pillow 14).
-pillow>=12.1
+pillow>=12.1         # verified 12.3.0
 
-# API, Web, and Networking
-fastapi>=0.110
-uvicorn>=0.27
-python-multipart>=0.0.5
-requests>=2.31.0
-openclaw>=2026.3.20
+# API, Web, and Networking (declared for the planned service layer; no module
+# imports them today).
+fastapi>=0.110       # verified 0.136.3
+uvicorn>=0.27        # verified 0.40.0
+python-multipart>=0.0.5   # verified 0.0.32
+requests>=2.31       # verified 2.33.1
+
+# NOTE: OpenClaw is a Node CLI (`npm install -g openclaw`), not a Python
+# package — listing a PyPI name for it here would install an unrelated
+# distribution. See README "OpenClaw Skill Installation".
 
 # Machine Learning Utilities & Configs
-scikit-learn>=1.4
-pydantic==2.7.1
-pyyaml==6.0.1
+scikit-learn>=1.4    # verified 1.9.1
+pydantic>=2.7        # verified 2.12.5
+pyyaml>=6.0          # verified 6.0.3
+
+# Deliberately absent: timm and albumentations. Both were listed before but no
+# module imports either (models/*/arch.py is plain torch); every model path
+# resolves through torch, torchvision or transformers. Re-add them if a new
+# tool actually uses them.
