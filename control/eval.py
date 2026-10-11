@@ -9,6 +9,7 @@ training table, so measuring on them is optimistic).
 
 import csv
 import random
+from functools import lru_cache
 from pathlib import Path
 
 import yaml
@@ -18,6 +19,11 @@ from control.schemas import HAM10000_CLASSES
 
 HELDOUT_SEED = 42
 HELDOUT_PER_CLASS = 25
+
+# Training/calibration split seeds (disjoint from the held-out seed).
+CALIBRATION_SEED = 11
+TRAIN_VAL_PER_CLASS = 15
+TRAIN_CAL_PER_CLASS = 30
 
 # Demo images (prompt.yaml) — excluded from every fit pool: they are the
 # showcase set, and they sit inside the training table (leakage if scored).
@@ -117,13 +123,25 @@ def local_image_stems(root: Path = ROOT_DIR) -> list[str]:
     return sorted({p.stem for p in test + full})
 
 
+@lru_cache(maxsize=4)
+def image_index(root_str: str) -> dict[str, Path]:
+    """stem -> image file, built once per root (test dir wins over full).
+
+    The previous per-stem `glob` scanned 25k files on every miss; the
+    held-out split and the training loop resolve thousands of stems, so
+    a single directory scan keeps split building and evaluation fast.
+    """
+    root = Path(root_str)
+    index = {p.stem: p for p in
+             (root / "dataset" / "ISIC2019_test").glob("*.jpg")}
+    for path in (root / "dataset" / "ISIC2019_full").glob("*/*.jpg"):
+        index.setdefault(path.stem, path)
+    return index
+
+
 def image_path_for_stem(stem: str, root: Path = ROOT_DIR) -> Path | None:
     """Resolve a stem to its file: test dir first, then full class folders."""
-    direct = root / "dataset" / "ISIC2019_test" / f"{stem}.jpg"
-    if direct.exists():
-        return direct
-    matches = sorted((root / "dataset" / "ISIC2019_full").glob(f"*/{stem}.jpg"))
-    return matches[0] if matches else None
+    return image_index(str(root.resolve())).get(stem)
 
 
 def heldout_split(
@@ -158,3 +176,41 @@ def heldout_split(
     rng.shuffle(heldout)
     rng.shuffle(fit)
     return fit, heldout
+
+
+def split_for_training(
+    heldout_per_class: int = 30,
+    val_per_class: int = TRAIN_VAL_PER_CLASS,
+    cal_per_class: int = TRAIN_CAL_PER_CLASS,
+    seed: int = HELDOUT_SEED,
+    root: Path = ROOT_DIR,
+) -> tuple[list[tuple[str, str]], list[tuple[str, str]],
+           list[tuple[str, str]], list[tuple[str, str]]]:
+    """Deterministic (train, calibration, val, heldout) for local fits.
+
+    Held-out stays untouched by training and by temperature fitting: the
+    fit pool is carved into train / calibration (temperature) / val
+    (checkpoint selection), all stratified and disjoint. Demo stems stay
+    excluded through `heldout_split`.
+    """
+    fit, heldout = heldout_split(seed=seed, per_class=heldout_per_class,
+                                 root=root)
+    by_class: dict[str, list[str]] = {}
+    for stem, label in fit:
+        by_class.setdefault(label, []).append(stem)
+    rng = random.Random(CALIBRATION_SEED)
+    train: list[tuple[str, str]] = []
+    calibration: list[tuple[str, str]] = []
+    val: list[tuple[str, str]] = []
+    for label in sorted(by_class):
+        stems = sorted(by_class[label])
+        rng.shuffle(stems)
+        val += [(s, label) for s in stems[:val_per_class]]
+        calibration += [(s, label)
+                        for s in stems[val_per_class:val_per_class + cal_per_class]]
+        train += [(s, label)
+                  for s in stems[val_per_class + cal_per_class:]]
+    rng.shuffle(train)
+    rng.shuffle(calibration)
+    rng.shuffle(val)
+    return train, calibration, val, heldout
