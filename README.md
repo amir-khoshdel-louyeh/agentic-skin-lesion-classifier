@@ -259,6 +259,22 @@ for s in quality brain diagnostic critic specialist chat; do
 done
 ```
 
+OpenClaw agents read case images from its own workspace, so every round
+needs those files staged there. That copy can drift from the dataset when
+images change, which used to surface as media-path errors mid-round. Re-sync
+it with the maintenance helper (idempotent; run it after updating the
+dataset, or at any time to check):
+
+```bash
+python stage_openclaw_media.py --check   # report drift only, exit 1 if stale
+python stage_openclaw_media.py           # hard-link missing/updated images
+python stage_openclaw_media.py --prune   # also drop images no longer used
+```
+
+Files are hard-linked, so the staged copy shares inodes with the dataset and
+costs no extra space; a cross-device target falls back to a byte copy.
+`--prune` is opt-in and refuses targets outside the OpenClaw workspace.
+
 ---
 
 ## Example Output
