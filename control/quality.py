@@ -11,6 +11,17 @@ the tool JSON it saw. Never diagnoses; never stops the round: a
 `flagged` image flows forward with its flag, and a tool crash is
 `no-evidence` for that check, never an abort. Invalid output fails
 safe to `flagged` (forward with flag), never to a stop.
+
+Control-side evidence (`gate_evidence`): the orchestrator already runs the
+deterministic `quality-gate` before this step, so its numbers are handed to
+the agent instead of leaving the agent to reproduce them. That keeps the
+single-writer rule the rest of the pipeline follows — control produces the
+numbers, the model only judges — and it removes the step a small local
+model gets wrong most often (running the command and quoting the JSON
+back). It is still EVIDENCE, never a decision: the agent alone chooses
+pass/cleaned/flagged, and no blur threshold lives in code. The gate's flags
+reach the critic independently, so an unusable or wrong Quality verdict can
+never hide that evidence.
 """
 
 from __future__ import annotations
@@ -33,6 +44,11 @@ QUALITY_SCHEMA = (
 )
 
 VALID_VERDICTS = ("pass", "cleaned", "flagged")
+
+# Fresh-session repair attempts after the first reply fails to parse, so a
+# weak local model gets three chances to emit the JSON verdict without
+# unbounded LLM spend. Two keeps the worst case at three sessions.
+MAX_REPAIR_RETRIES = 2
 
 # Fail-safe cite written ONLY by parse_quality() on unparseable or
 # schema-violating replies. run_quality() treats a verdict carrying
@@ -63,20 +79,65 @@ def build_quality_repair_prompt(raw: str,
     )
 
 
-def build_quality_prompt(record: dict, role_text: str,
-                          toolkit_text: str) -> str:
-    """Prompt the Quality Agent with case + role + its toolkit only."""
+def build_quality_prompt(record: dict, role_text: str, toolkit_text: str,
+                          gate_evidence: dict | None = None) -> str:
+    """Prompt the Quality Agent with case + role + toolkit (+ gate numbers).
+
+    `gate_evidence` is the control-side `quality_gate` result the
+    orchestrator already collected; see the module docstring for why it is
+    handed over. It is evidence, never a decision.
+    """
     metadata = json.dumps(record.get("metadata", {}), ensure_ascii=False)
+    if gate_evidence:
+        evidence_block = (
+            "Control-side quality_gate result (authoritative, read-only "
+            "evidence — cite it):\n"
+            + json.dumps({
+                "quality_pass": gate_evidence.get("passed"),
+                "flags": gate_evidence.get("flags", []),
+                "metrics": gate_evidence.get("metrics", {}),
+                "tool_error": gate_evidence.get("error") or None,
+            }, ensure_ascii=False)
+            + "\n\n"
+        )
+        source = ("judge only from the control-side result below")
+    else:
+        evidence_block = (
+            "No control-side result was collected for this case: run the "
+            "`quality-gate` line below and judge from its JSON.\n\n"
+        )
+        source = ("judge only from the tool JSON you get back")
+    # Design note (verified live 2026-10-16 with qwen3:8b): the previous
+    # wording opened with `Case image: <path>` and asked the agent to
+    # "assess this image's quality". A local text-only model read that as a
+    # vision task, invented a description of the lesion, and answered with
+    # dermatological prose or even a web_search call — never the verdict.
+    # Stating the no-image boundary up front, presenting the path only as a
+    # command argument, and spelling out the three verdict meanings yields
+    # valid, evidence-grounded verdicts (flagged on a blurry case, pass on a
+    # clean one).
     return (
         f"{role_text}\n"
-        f"Case image: {record.get('image_path')}\n"
-        f"Case metadata (context only, never for diagnosis): {metadata}\n"
-        f"Your toolkit:\n{toolkit_text}\n\n"
-        "Assess this image's quality now: run `quality_gate` first, "
-        "clean with `preprocess` if YOU judge it worthwhile (0..n times), "
-        "read `abcde_analyzer` only as context. Then report.\n\n"
-        "Reply with exactly one JSON object, no other text: "
-        + QUALITY_SCHEMA
+        "Decide the image-quality verdict for this case.\n\n"
+        "You have no image capability. You must never look at the image, "
+        f"describe it, or search the web for it — {source}.\n\n"
+        f"Case file (a path argument for the commands below — you cannot see "
+        f"its contents): {record.get('image_path')}\n"
+        f"Case metadata (context only, never for diagnosis): {metadata}\n\n"
+        f"{evidence_block}"
+        "Optional cleanup — run a line EXACTLY as written only if YOU decide "
+        f"cleaning is worthwhile (0..n times):\n{toolkit_text}\n\n"
+        "VERDICT MEANINGS (pick exactly one):\n"
+        '- "pass": good enough as-is.\n'
+        '- "flagged": usable with its flag. Use this whenever anything is '
+        "uncertain OR whenever you did NOT run the preprocess line.\n"
+        '- "cleaned": ONLY if you actually ran the preprocess line and hold '
+        "its exact --output path; report that path.\n"
+        "Never name a disease and never give a malignancy judgment. Do NOT "
+        "call any tool other than the lines above, and do NOT write medical "
+        "commentary.\n\n"
+        "You MUST reply with exactly one JSON object and no other text.\n"
+        "Schema: " + QUALITY_SCHEMA
     )
 
 
@@ -132,12 +193,24 @@ def parse_quality(raw: str) -> dict:
     }
 
 
+def _payload_text(response) -> str:
+    """Agent reply text from an OpenClaw payload list, else a JSON dump."""
+    if isinstance(response, dict) and response.get("payloads"):
+        return "\n".join(item.get("text", "")
+                         for item in response["payloads"])
+    return json.dumps(response, ensure_ascii=False)
+
+
 def run_quality(record: dict, toolkit_text: str,
-                agent_id: str = "main") -> dict:
+                agent_id: str = "main",
+                gate_evidence: dict | None = None) -> dict:
     """Run one Quality Agent session. Never raises, never stops the round.
 
     Backend failure, missing role files, or invalid output all become a
     `flagged` verdict that flows forward — the round continues.
+
+    `gate_evidence` (optional) is the control-side `quality_gate` result
+    handed to the agent as read-only evidence; the agent still decides.
     """
     from control.prompts import load_role  # lazy: file layout dependency
 
@@ -154,7 +227,8 @@ def run_quality(record: dict, toolkit_text: str,
 
     try:
         response = run_openclaw_cli(
-            build_quality_prompt(record, role_text, toolkit_text),
+            build_quality_prompt(record, role_text, toolkit_text,
+                                 gate_evidence=gate_evidence),
             agent_id=agent_id, show_command=False)
     except Exception as exc:  # noqa: BLE001 - advisory role only
         return {
@@ -163,31 +237,24 @@ def run_quality(record: dict, toolkit_text: str,
             "cites": ["fail-safe: agent backend failed"],
             "cleaned_image": None,
         }
-    if isinstance(response, dict) and response.get("payloads"):
-        raw = "\n".join(item.get("text", "")
-                         for item in response["payloads"])
-    else:
-        raw = json.dumps(response, ensure_ascii=False)
-    first = parse_quality(raw)
-    if first["cites"] != [FAILSAFE_CITE]:
-        _release_llm()
-        return first
-    # Exactly one repair retry on parse failure; whatever comes back —
-    # valid or fail-safe flagged — is final and flows forward.
-    try:
-        retry_response = run_openclaw_cli(
-            build_quality_repair_prompt(raw, first.get("reasons", [])),
-            agent_id=agent_id, show_command=False)
-    except Exception:  # noqa: BLE001 - keep the first fail-safe
-        _release_llm()
-        return first
-    if isinstance(retry_response, dict) and retry_response.get("payloads"):
-        retry_raw = "\n".join(item.get("text", "")
-                              for item in retry_response["payloads"])
-    else:
-        retry_raw = json.dumps(retry_response, ensure_ascii=False)
+    raw = _payload_text(response)
+    result = parse_quality(raw)
+    # Up to MAX_REPAIR_RETRIES fresh sessions on parse failure; the first
+    # valid verdict wins, and whatever the last attempt produced (valid or
+    # fail-safe flagged) is final and flows forward.
+    for _ in range(MAX_REPAIR_RETRIES):
+        if result["cites"] != [FAILSAFE_CITE]:
+            break
+        try:
+            retry_response = run_openclaw_cli(
+                build_quality_repair_prompt(raw, result.get("reasons", [])),
+                agent_id=agent_id, show_command=False)
+        except Exception:  # noqa: BLE001 - keep the last fail-safe
+            break
+        raw = _payload_text(retry_response)
+        result = parse_quality(raw)
     _release_llm()
-    return parse_quality(retry_raw)
+    return result
 
 
 def resolve_cleaned_image(record: dict, quality: dict,

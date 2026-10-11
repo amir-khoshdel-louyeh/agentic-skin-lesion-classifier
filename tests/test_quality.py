@@ -21,6 +21,7 @@ from control.manifest import (  # noqa: E402
 from control.prompts import load_role  # noqa: E402
 from control.quality import (  # noqa: E402
     FAILSAFE_CITE,
+    MAX_REPAIR_RETRIES,
     QUALITY_TOOLKIT,
     build_quality_prompt,
     build_quality_repair_prompt,
@@ -122,7 +123,11 @@ finally:
     skin_agent.run_openclaw_cli = _real
 
 
+garbage_calls = []
+
+
 def _always_garbage(*args, **kwargs):
+    garbage_calls.append(args[0][:40])
     return {"payloads": [{"text": "~~ not json ~~"}]}
 
 
@@ -132,6 +137,12 @@ try:
                       "toolkit", agent_id="main")
     check("double-garbage-flagged", out["verdict"] == "flagged"
           and out["cites"] == [FAILSAFE_CITE], str(out))
+    # Retries stay bounded: one initial session + MAX_REPAIR_RETRIES.
+    check("repair-retries-bounded", MAX_REPAIR_RETRIES == 2,
+          str(MAX_REPAIR_RETRIES))
+    check("repair-retries-used",
+          len(garbage_calls) == MAX_REPAIR_RETRIES + 1,
+          f"sessions={len(garbage_calls)}")
 except Exception as exc:  # noqa: BLE001
     check("double-garbage-flagged", False, f"raised: {exc}")
 finally:
@@ -164,6 +175,31 @@ prompt = build_quality_prompt({"image_path": "img.jpg", "metadata": {}},
                               role_text, toolkit_text)
 check("prompt-has-schema", "pass|cleaned|flagged" in prompt)
 check("prompt-has-image", "img.jpg" in prompt)
+check("prompt-one-json-object", "exactly one JSON object" in prompt)
+check("prompt-never-looks-at-image", "never look at the image" in prompt)
+check("prompt-no-evidence-by-default", "quality_pass" not in prompt)
+
+# 5b. Control-side gate numbers are handed over as EVIDENCE (never a
+# decision): the agent still chooses the verdict, and a small local model
+# no longer has to execute the command to cite a real number.
+gate = {"passed": False, "metrics": {"blur_variance": 12.5},
+        "flags": ["blurry"], "error": ""}
+evidence_prompt = build_quality_prompt(
+    {"image_path": "img.jpg", "metadata": {}}, role_text, toolkit_text,
+    gate_evidence=gate)
+check("prompt-carries-gate-evidence",
+      "blur_variance" in evidence_prompt and "blurry" in evidence_prompt
+      and "read-only evidence" in evidence_prompt)
+check("prompt-evidence-keeps-decision-with-agent",
+      "quality_pass" in evidence_prompt
+      and "exactly one JSON object" in evidence_prompt
+      and "pass|cleaned|flagged" in evidence_prompt)
+check("prompt-evidence-reports-tool-error",
+      "tool_error" in build_quality_prompt(
+          {"image_path": "img.jpg", "metadata": {}}, role_text,
+          toolkit_text,
+          gate_evidence={"passed": False, "metrics": {}, "flags": [],
+                         "error": "tool_failed"}))
 
 # 6. Skill file exists with the toolkit.
 skill = ROOT / "openclaw-skills" / "quality" / "SKILL.md"
@@ -201,6 +237,13 @@ check("orchestrator-quality-audit", '"quality": quality' in orch_text
       or "'quality': quality" in orch_text or '"quality":' in orch_text)
 check("orchestrator-quality-timing", '"quality_s"' in orch_text
       or "'quality_s'" in orch_text)
+# The deterministic gate must run BEFORE the Quality Agent so its numbers
+# can be handed over as evidence.
+check("orchestrator-gate-before-quality",
+      0 <= orch_text.index("run_guard(") < orch_text.index("run_quality("),
+      "gate must be collected before the Quality Agent runs")
+check("orchestrator-quality-gets-evidence",
+      "gate_evidence=guard" in orch_text)
 check("quality-line-renders", quality_line(
     {"verdict": "flagged", "reasons": ["blur"],
      "cites": ["c"], "cleaned_image": None}).startswith("Quality: flagged"))

@@ -49,10 +49,18 @@ Reply with exactly one JSON object, no other text:
 
 ## Rules
 
+- You have no image capability: you never look at, describe, or search
+  the web for the image. The case image is only a path argument inside
+  the command lines. Judge solely from the tool JSON and the
+  control-side `quality_gate` result in your brief.
 - `pass`: image good enough as-is.
 - `cleaned`: you ran `preprocess`; `cleaned_image` is required.
 - `flagged`: usable but with flags — the round flows forward with the flag.
+  Use this whenever anything is uncertain, or whenever you did not run
+  the `preprocess` line.
 - Never emit disease names or malignancy judgments (never diagnoses).
+- Do not call any tool other than the lines above, and do not write
+  medical commentary.
 - Never abort the round (never stops the round): a tool crash is
   `no-evidence` for that check, recorded in `reasons`/`cites`.
 - Every reason MUST cite the tool JSON it relies on.

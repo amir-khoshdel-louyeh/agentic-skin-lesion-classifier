@@ -248,24 +248,25 @@ def run_round(
         except Exception:
             pass  # progress reporting must never break a round
 
-    # plan.tmp chain step 1 (T2): Quality Agent (LLM thinker) runs first.
-    # It decides pass|cleaned|flagged itself; it never aborts the round.
-    # Control-side guard + ABCDE below remain as plain evidence for the
-    # critic flags + audit (they never decide anything); the Quality
-    # verdict is the agent voice that T3 (Brain-loop) will steer on.
+    # plan.tmp chain step 1 (T2): Quality Agent (LLM thinker) decides
+    # pass|cleaned|flagged itself; it never aborts the round. The
+    # deterministic control-side gate runs FIRST so its numbers can be
+    # handed to the agent as read-only evidence (single-writer: control
+    # produces the numbers, the model only judges) and then feed the
+    # critic flags + audit below. Neither piece decides anything by itself.
+    _t0 = _time.perf_counter()
+    guard = run_guard(str(record.get("image_path")))
+    timings["guard_s"] = round(_time.perf_counter() - _t0, 2)
     _t0 = _time.perf_counter()
     # Same pre-rendered EXACT lines the diagnostic sessions get: the real
     # case image (and preprocess's --output) already filled in, so the
     # Quality Agent has no path to construct itself.
     quality = run_quality(
         record, render_subset_for_case(manifest, QUALITY_TOOLKIT, record),
-        agent_id=agent_id)
+        agent_id=agent_id, gate_evidence=guard)
     timings["quality_s"] = round(_time.perf_counter() - _t0, 2)
     _emit("quality", {"verdict": quality.get("verdict"),
                       "reasons": quality.get("reasons", [])})
-    _t0 = _time.perf_counter()
-    guard = run_guard(str(record.get("image_path")))
-    timings["guard_s"] = round(_time.perf_counter() - _t0, 2)
     _t0 = _time.perf_counter()
     abcde = run_abcde(str(record.get("image_path")))
     timings["abcde_s"] = round(_time.perf_counter() - _t0, 2)
