@@ -31,11 +31,16 @@ def ensure_runtime(deps: tuple[str, ...] = ("torch", "torchvision",
     if not _missing(deps):
         return
     root = Path(__file__).resolve().parent.parent
+    venv_root = (root / ".venv").resolve()
+    # A venv interpreter is a symlink to the base binary, so comparing
+    # resolved executable paths would wrongly treat the venv as "already
+    # current". sys.prefix is the real discriminator.
+    if Path(sys.prefix).resolve() == venv_root:
+        return
     candidates = [root / ".venv" / "bin" / "python",
                   root / ".venv" / "Scripts" / "python.exe"]
-    current = Path(sys.executable).resolve()
     for candidate in candidates:
-        if not candidate.exists() or candidate.resolve() == current:
+        if not candidate.exists():
             continue
         os.environ[BOOTSTRAP_ENV] = "1"
         os.execv(str(candidate), [str(candidate), *sys.argv])
