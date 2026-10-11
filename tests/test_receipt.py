@@ -29,7 +29,7 @@ manifest = load_manifest(ROOT / "tools" / "manifest.yaml")
 record = {"image_path": "dataset/ISIC2019_test/ISIC_0000000.jpg",
           "metadata": {}}
 proc = subprocess.run(
-    [sys.executable, "tools/skin_lesion_fast.py", "--image",
+    [sys.executable, "tools/ham10000_cnn.py", "--image",
      record["image_path"]], capture_output=True, text=True, timeout=300,
     cwd=str(ROOT))
 actual = json.loads(proc.stdout)
@@ -39,7 +39,7 @@ cls, conf = actual["disease_name"], actual["confidence_score"]
 def envelope(confidence):
     return VerdictEnvelope(
         ran=True,
-        command="python tools/skin_lesion_fast.py --image "
+        command="python tools/ham10000_cnn.py --image "
                 "dataset/ISIC2019_test/ISIC_0000000.jpg",
         exit_code=0, predicted_class=cls, confidence=confidence,
         reasoning="t", uncertainty_flags=[])

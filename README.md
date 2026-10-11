@@ -223,14 +223,6 @@ python main.py --record-index 0
 
 ## Direct Tool Invocation
 
-Fast model:
-
-```bash
-python tools/skin_lesion_fast.py 
-  --image path/to/image.jpg 
-  --metadata '{"age":45,"sex":"female"}'
-```
-
 Balanced model:
 
 ```bash
@@ -556,7 +548,9 @@ Through this project I strengthened my understanding of:
 │
 ├── tools/
 │   ├── ham10000_cnn.py multimodal_fusion.py ensemble_high.py
-│   ├── dermai_b0.py skin_lesion_fast/mid/high.py (legacy, callable)
+│   ├── dermai_b0.py skin_lesion_mid/high.py (legacy, callable)
+│   ├── isic_common.py isic_efficientnet_b4/resnet50/vit.py
+│   ├── lesion_segmentation.py (MedSAM, support tier)
 │   ├── quality_gate.py preprocess.py abcde_analyzer.py (Quality only)
 │   └── manifest.yaml (single source of WHAT exists)
 │
@@ -666,11 +660,13 @@ python benchmark.py --split heldout --tools ham10000-cnn,multimodal-fusion
 Manual verification (single tools, needs weights):
 
 ```bash
-python tools/skin_lesion_fast.py --image path/to/image.jpg
+python tools/ham10000_cnn.py --image path/to/image.jpg
 
-python tools/skin_lesion_mid.py --image path/to/image.jpg
+python tools/isic_resnet50.py --image path/to/image.jpg
 
-python tools/skin_lesion_high.py --image path/to/image.jpg
+python tools/isic_vit.py --image path/to/image.jpg
+
+python tools/lesion_segmentation.py --image path/to/image.jpg
 
 python main.py --record-index 0
 ```

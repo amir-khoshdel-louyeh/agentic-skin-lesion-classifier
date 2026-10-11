@@ -63,7 +63,7 @@ for legacy in ("skin-lesion-fast", "skin-lesion-mid", "skin-lesion-high"):
 manifest = load_manifest(ROOT / "tools" / "manifest.yaml")
 names = {t.name for t in manifest.tools}
 for tool in ("ham10000-cnn", "multimodal-fusion", "ensemble-high",
-             "dermai-b0", "skin-lesion-fast", "skin-lesion-mid",
+             "dermai-b0", "skin-lesion-mid",
              "skin-lesion-high", "drdiag-vlm", "vlm-ollama",
              "quality-gate", "preprocess", "abcde-analyzer"):
     check(f"manifest-keeps-{tool}", tool in names)

@@ -20,7 +20,7 @@ python tools/ham10000_cnn.py --image <path_to_image>
 python tools/multimodal_fusion.py --image <path_to_image> --metadata '<json>'
 python tools/ensemble_high.py --image <path_to_image> --metadata '<json>'
 python tools/dermai_b0.py --image <path_to_image>
-python tools/skin_lesion_fast.py --image <path_to_image>
+python tools/ham10000_cnn.py --image <path_to_image>
 python tools/skin_lesion_mid.py --image <path_to_image>
 python tools/skin_lesion_high.py --image <path_to_image>
 ```
