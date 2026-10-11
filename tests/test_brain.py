@@ -3,7 +3,7 @@ Run: .venv/bin/python tests/test_brain.py
 Exit non-zero on any failure.
 
 Locks in §2.2: text-only orders (no images, no tools), SHORT steer per
-session, suggested_subset as hint only, Brain-decided 1..3 sessions with
+session, suggested_subset as hint only, Brain-decided 1..MAX sessions with
 early stop, fail-safe stop on invalid JSON, every order + why audited.
 """
 import json
@@ -75,7 +75,7 @@ for garbage in ("", "{}", "[]", '{"stop": null}', "{unclosed"):
     except Exception:  # noqa: BLE001 - parser must never raise
         ok = False
     check(f"never-raises:{garbage[:12]!r}", ok)
-check("max-sessions-cap", MAX_SESSIONS == 3)
+check("max-sessions-cap", MAX_SESSIONS == 7)
 
 # 3. Backend failure becomes a stop order, never an exception.
 import skin_agent  # noqa: E402
@@ -112,6 +112,34 @@ check("pool-excludes-vlm", "drdiag-vlm" not in pool
       and "vlm-ollama" not in pool, str(pool))
 check("pool-has-diagnostics", "ham10000-cnn" in pool
       and "multimodal-fusion" in pool, str(pool))
+
+# 5b. A failed local calibration keeps a tool OUT of the pool.
+import control.calibration as calibration  # noqa: E402
+
+_real_blocked = calibration.blocked_tools
+calibration.blocked_tools = lambda *a, **k: {"ham10000-cnn"}
+try:
+    gated = diagnostic_pool(manifest)
+    check("pool-drops-failed-calibration", "ham10000-cnn" not in gated
+          and "multimodal-fusion" in gated, str(gated))
+finally:
+    calibration.blocked_tools = _real_blocked
+
+import tempfile  # noqa: E402
+
+with tempfile.TemporaryDirectory() as tmp:
+    import json as _json  # noqa: E402
+
+    registry = Path(tmp, "calibration")
+    registry.mkdir()
+    (registry / "failed-tool.json").write_text(_json.dumps(
+        {"tool": "failed-tool", "gate": {"passed": False}}))
+    (registry / "ok-tool.json").write_text(_json.dumps(
+        {"tool": "ok-tool", "gate": {"passed": True}}))
+    (registry / "broken.json").write_text("not json")
+    check("calibration-blocks-only-failures",
+          calibration.blocked_tools(Path(tmp)) == {"failed-tool"},
+          str(calibration.blocked_tools(Path(tmp))))
 record = {"image_path": "dataset/secret_image.jpg",
           "metadata": {"age": 45}}
 prompt = build_brain_prompt(record, "Quality: flagged — blur", [], role_text,

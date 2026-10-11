@@ -55,7 +55,7 @@ Prompt records in prompt.yaml
    Never diagnoses, never stops the round.
       │
       ▼
-2. BRAIN-LOOP (LLM supervisor + up to 3 thinker sessions):
+2. BRAIN-LOOP (LLM supervisor + up to 7 thinker sessions):
    Steer 1 → Session 1 → receipt → Steer 2 → Session 2 → receipt →
    Steer 3 → Session 3. Brain may stop early. Every session sees the
    FULL diagnostic pool and chooses its own tools.
@@ -344,10 +344,10 @@ The system follows a decoupled, agent-driven orchestration architecture where th
    ┌─────────────────────────┐
    │  Brain Supervisor (LLM) │ text-only steerer, NO tools, NO images
    └──────┬──────────────────┘
-          │ steer 1..3 (hint-only subset) / early stop
+          │ steer 1..7 (hint-only subset) / early stop
           ▼
    ┌─────────────────────────┐
-   │ Diagnostic Sessions     │ up to 3 isolated thinkers, FULL pool,
+   │ Diagnostic Sessions     │ up to 7 isolated thinkers, FULL pool,
    │ (LLM + tools)           │ free 1..n tool choice each
    └─────────────────────────┘
                 │ re-executed receipts only (single-writer numbers)

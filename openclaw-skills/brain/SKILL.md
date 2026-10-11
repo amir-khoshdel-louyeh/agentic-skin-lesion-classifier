@@ -39,7 +39,7 @@ Reply with exactly one JSON object, no other text:
 - `suggested_subset` is a hint only: the session may ignore it. Never
   force tool commands, never force subsets, never write full scripts.
 - Set `stop=true` (with a `why`) when the evidence so far is enough;
-  otherwise `stop=false` for one more session. You decide 1..3 sessions.
+  otherwise `stop=false` for one more session. You decide 1..7 sessions.
 - An invalid order stops the loop (fail-safe) — always write valid JSON
   with a real `why`.
 

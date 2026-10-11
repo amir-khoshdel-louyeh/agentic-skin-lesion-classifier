@@ -7,7 +7,7 @@ diagnostic tools.
 
 Per step it writes a SHORT steering note, not a script. `suggested_subset`
 is a HINT only; the session may ignore it. It decides how many sessions
-run (1..3) via `stop`. Output per step:
+run (1..MAX_SESSIONS) via `stop`. Output per step:
 `{"steer": str, "suggested_subset": [names], "stop": bool, "why": str}`.
 Invalid order = stop (fail-safe). Every order + why is audit-logged.
 """
@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import re as _re
 
-MAX_SESSIONS = 3
+MAX_SESSIONS = 7
 
 # VLM tools stay OUT of the diagnostic pool until they re-pass the 0.6
 # entry bar (plan.tmp §5). The Brain may not even hint at them.
@@ -30,10 +30,19 @@ BRAIN_SCHEMA = (
 
 
 def diagnostic_pool(manifest) -> list[str]:
-    """Hintable diagnostic tool names: ready + diagnostic, minus VLM."""
+    """Hintable diagnostic names: ready + diagnostic, minus VLM/failed.
+
+    A tool with a local calibration record that did not clear the 0.60
+    accuracy / 0.10 ECE gate stays OUT of the pool even though its CLI
+    still runs. With no calibration artifacts (fresh clone) nothing is
+    blocked, so the pool degrades to the manifest alone.
+    """
+    from control.calibration import blocked_tools  # lazy: no cycle
+
+    blocked = blocked_tools()
     return [t.name for t in manifest.tools
             if t.status == "ready" and t.category == "diagnostic"
-            and t.name not in VLM_EXCLUDED]
+            and t.name not in VLM_EXCLUDED and t.name not in blocked]
 
 
 def build_brain_prompt(record: dict, quality_text: str,
