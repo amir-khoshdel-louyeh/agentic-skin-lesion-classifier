@@ -56,6 +56,28 @@ MAX_REPAIR_RETRIES = 2
 # anything else (including a genuine `flagged`) is final.
 FAILSAFE_CITE = "fail-safe: unparseable or schema-violating reply"
 
+# The mandatory report footer belongs to the RENDERER, not the verdict.
+# The locked system prompt used to ask for it, so models appended it to
+# `reasons`, where it landed in Part A and in every downstream brief.
+_FOOTER_RE = _re.compile(
+    r"research use only\s*[—–-]?\s*not a medical diagnosis\.?",
+    _re.IGNORECASE,
+)
+
+
+def _strip_footer(text: str) -> str:
+    return _FOOTER_RE.sub("", text or "").strip(" .;—–-")
+
+
+def _gate_cite(gate_evidence: dict) -> str:
+    """Canonical, machine-owned rendering of the quality gate result."""
+    return "quality_gate: " + json.dumps({
+        "quality_pass": gate_evidence.get("passed"),
+        "flags": gate_evidence.get("flags", []),
+        "metrics": gate_evidence.get("metrics", {}),
+        "tool_error": gate_evidence.get("error") or None,
+    }, ensure_ascii=False, sort_keys=True)
+
 
 def _release_llm() -> None:
     """Best-effort LLM unload after a session (sequential GPU)."""
@@ -67,14 +89,21 @@ def _release_llm() -> None:
 
 
 def build_quality_repair_prompt(raw: str,
-                                  reasons: list[str] | None = None
+                                  reasons: list[str] | None = None,
+                                  gate_evidence: dict | None = None
                                   ) -> str:
     defect = ("Specifically: " + "; ".join(str(r)[:200] for r in reasons)
               if reasons else
               "It was not a valid quality verdict.")
+    # The retry used to be sent WITHOUT the gate evidence, so a model that
+    # misread the first prompt could only fail the same way twice.
+    evidence = ("\nControl-side evidence (authoritative, cite it):\n"
+                + _gate_cite(gate_evidence) + "\n"
+                if gate_evidence else "")
     return (
         "Your previous reply was rejected. " + defect + " Reply ONCE more "
         "with exactly one JSON object, no other text: " + QUALITY_SCHEMA +
+        evidence +
         "\nPrevious reply:\n" + (raw or "").strip()[:2000]
     )
 
@@ -141,13 +170,18 @@ def build_quality_prompt(record: dict, role_text: str, toolkit_text: str,
     )
 
 
-def parse_quality(raw: str) -> dict:
+def parse_quality(raw: str, gate_evidence: dict | None = None) -> dict:
     """Strict-parse a Quality Agent reply. Never raises.
 
     Fail-safe is always `flagged` (flows forward with its flag): malformed
     JSON, schema violations, missing cites, or a `cleaned` claim without
     a `cleaned_image` path all become `flagged` with the defect recorded.
     Nothing here may stop the round.
+
+    `gate_evidence` (the control-side quality_gate result) makes the
+    verdict auditable: its numbers are attached as `control_cites` so
+    Part A never depends on model prose, and a `pass` on an image the
+    deterministic gate failed is overridden to `flagged`.
     """
 
     def flagged(*reasons: str) -> dict:
@@ -185,12 +219,26 @@ def parse_quality(raw: str) -> dict:
         return flagged("invalid cleaned_image: must be a path or null")
     if verdict == "cleaned" and cleaned_image is None:
         return flagged("claimed cleaned without a cleaned_image path")
-    return {
+    result = {
         "verdict": verdict,
-        "reasons": [str(r)[:300] for r in reasons],
-        "cites": [str(c)[:300] for c in cites],
+        "reasons": [_strip_footer(str(r))[:300] for r in reasons
+                    if _strip_footer(str(r))],
+        "cites": [_strip_footer(str(c))[:300] for c in cites
+                  if _strip_footer(str(c))],
         "cleaned_image": cleaned_image,
     }
+    if not result["reasons"] or not result["cites"]:
+        return flagged("verdict lost its reasons/cites after footer removal")
+    if gate_evidence:
+        result["control_cites"] = [_gate_cite(gate_evidence)]
+        failed = not gate_evidence.get("passed")
+        if result["verdict"] == "pass" and failed:
+            gate_flags = ",".join(gate_evidence.get("flags") or []) or "none"
+            result["verdict"] = "flagged"
+            result["reasons"].insert(
+                0, f"Control gate failed ({gate_flags}) — agent 'pass' "
+                   "overridden by the deterministic gate")
+    return result
 
 
 def _payload_text(response) -> str:
@@ -238,7 +286,7 @@ def run_quality(record: dict, toolkit_text: str,
             "cleaned_image": None,
         }
     raw = _payload_text(response)
-    result = parse_quality(raw)
+    result = parse_quality(raw, gate_evidence=gate_evidence)
     # Up to MAX_REPAIR_RETRIES fresh sessions on parse failure; the first
     # valid verdict wins, and whatever the last attempt produced (valid or
     # fail-safe flagged) is final and flows forward.
@@ -247,12 +295,13 @@ def run_quality(record: dict, toolkit_text: str,
             break
         try:
             retry_response = run_openclaw_cli(
-                build_quality_repair_prompt(raw, result.get("reasons", [])),
+                build_quality_repair_prompt(raw, result.get("reasons", []),
+                                            gate_evidence=gate_evidence),
                 agent_id=agent_id, show_command=False)
         except Exception:  # noqa: BLE001 - keep the last fail-safe
             break
         raw = _payload_text(retry_response)
-        result = parse_quality(raw)
+        result = parse_quality(raw, gate_evidence=gate_evidence)
     _release_llm()
     return result
 

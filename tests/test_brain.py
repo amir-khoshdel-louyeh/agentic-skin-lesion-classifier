@@ -110,8 +110,19 @@ manifest = load_manifest(ROOT / "tools" / "manifest.yaml")
 pool = diagnostic_pool(manifest)
 check("pool-excludes-vlm", "drdiag-vlm" not in pool
       and "vlm-ollama" not in pool, str(pool))
-check("pool-has-diagnostics", "ham10000-cnn" in pool
-      and "isic-resnet50" in pool, str(pool))
+# Pool membership is calibration-driven (a retrain can block or clear any
+# tool), so assert the RULE instead of naming today's survivors: exactly
+# the ready diagnostic tools minus VLM tiers minus failed calibrations.
+from control.calibration import load_registry  # noqa: E402
+
+blocked_now = {name for name, rec in load_registry().items()
+               if not (rec.get("gate") or {}).get("passed")}
+expected_pool = [t.name for t in manifest.tools
+                 if t.status == "ready" and t.category == "diagnostic"
+                 and t.name not in ("drdiag-vlm", "vlm-ollama")
+                 and t.name not in blocked_now]
+check("pool-has-diagnostics", bool(pool) and pool == expected_pool,
+      f"pool={pool} expected={expected_pool}")
 
 # 5b. A failed local calibration keeps a tool OUT of the pool.
 import control.calibration as calibration  # noqa: E402

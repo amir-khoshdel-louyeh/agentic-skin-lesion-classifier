@@ -13,8 +13,27 @@ single-writer protocol forbids, so the unused prompt builder is gone.
 """
 
 import math
+import os
 
 DEFAULT_ENTROPY_THRESHOLD = 0.9  # nats; max ln(7) ~= 1.95
+
+# The doctor file's `entropy_threshold` used to be print-only: every tool
+# hardcoded the default, so a physician's edit changed the report text and
+# nothing else. The orchestrator exports the validated value here and every
+# gate reads it, so the edit actually takes effect.
+ENTROPY_ENV = "SKIN_ENTROPY_THRESHOLD"
+
+
+def env_entropy_threshold(default: float = DEFAULT_ENTROPY_THRESHOLD) -> float:
+    """Validated entropy threshold from the environment (or the default)."""
+    raw = os.environ.get(ENTROPY_ENV)
+    try:
+        value = float(raw) if raw is not None else float(default)
+    except (TypeError, ValueError):
+        return default
+    # Outside the doctor's allowed band the value is ignored, never clamped
+    # silently into a laxer gate.
+    return value if 0.0 < value <= math.log(7) else default
 
 
 def entropy(probs: dict[str, float]) -> float:

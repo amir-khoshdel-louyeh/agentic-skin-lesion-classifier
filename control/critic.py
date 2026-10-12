@@ -10,8 +10,17 @@ from __future__ import annotations
 import json
 
 CRITIC_SCHEMA = (
-    '{"objection": bool, "reasons": [string], "cites": [string]}'
+    '{"objection": bool, '
+    '"code": "unflagged_disagreement|miscounted_receipt", '
+    '"reasons": [string], "cites": [string]}'
 )
+
+# Closed set of defect classes the referee does NOT already handle. Image
+# quality is a machine rule now, and confidence thresholds are counted by
+# decide(), so an objection to either is not actionable — the model used
+# to raise it every time on a flagged case, which turned the referee into
+# a rubber stamp. A code is only honored when the evidence matches it.
+OBJECTION_CODES = ("unflagged_disagreement", "miscounted_receipt")
 
 
 def build_critic_prompt(verdicts: list, flags: list[str],
@@ -35,11 +44,21 @@ def build_critic_prompt(verdicts: list, flags: list[str],
         "You are the safety critic of a skin-lesion screening round. "
         "Your ONLY job is to object to unsafe verdicts. You may NOT "
         "confirm, clear, or diagnose any case.\n\n"
-        "Object (objection=true) ONLY if you can point to a concrete "
-        "defect in the evidence below: a miscounted receipt, a confidence "
-        "below its threshold, an unflagged disagreement, a Quality flag "
-        "the verdicts ignore, or a case flag the verdicts ignore. Each "
-        "reason MUST cite the verdict number or flag it relies on.\n\n"
+        "Image quality is ALREADY handled deterministically by the "
+        "referee: a flagged image can never be reported benign. Do NOT "
+        "object merely because the image is flagged, and do NOT object "
+        "because a diagnostic verdict's flags list is empty — verdict "
+        "flags come from the model tool itself (entropy gate), never from "
+        "the separate Quality Agent step.\n\n"
+        "Object (objection=true) ONLY for a concrete defect INSIDE the "
+        "verdicts below, and name its code:\n"
+        "- \"unflagged_disagreement\": two countable verdicts disagree and "
+        "neither carries a disagreement flag.\n"
+        "- \"miscounted_receipt\": a verdict was counted without a valid "
+        "receipt.\n"
+        "Anything else (blur, quality, low confidence) has no code: the "
+        "referee already handles it deterministically. Each reason MUST "
+        "cite the verdict number it relies on.\n\n"
         f"{quality_section}"
         f"Case flags: {', '.join(flags) or 'none'}\n"
         + "\n".join(lines)
@@ -48,12 +67,19 @@ def build_critic_prompt(verdicts: list, flags: list[str],
     )
 
 
-def parse_objection(raw: str, verdict_count: int) -> tuple[bool, list[str]]:
+def parse_objection(raw: str, verdict_count: int,
+                    verdicts: list | None = None
+                    ) -> tuple[bool, list[str]]:
     """Strict-parse a critic reply. Returns (sustained, reasons).
 
     Fail-safe toward silence: anything invalid, uncited, or out of range
     is NOT an objection. A broken critic must never force referrals by
     itself — the calibrated verdicts already do that when unsure.
+
+    When `verdicts` is given, the claimed defect code is checked against
+    the evidence it names: an `unflagged_disagreement` needs two distinct
+    countable classes, and a `miscounted_receipt` needs a non-countable
+    verdict. A code that the evidence contradicts is silence.
     """
     import re as _re
 
@@ -76,6 +102,20 @@ def parse_objection(raw: str, verdict_count: int) -> tuple[bool, list[str]]:
         nums = [int(n) for n in _re.findall(r"\d+", str(cite))]
         if nums and not any(1 <= n <= verdict_count for n in nums):
             return False, [f"cite out of range: {cite!r}"]
+    code = payload.get("code")
+    if code not in OBJECTION_CODES:
+        return False, [f"objection without an actionable code: {code!r}"]
+    if verdicts is not None:
+        countable = [v for v in verdicts if getattr(v, "is_countable",
+                                                lambda: False)()]
+        if code == "unflagged_disagreement":
+            classes = {v.predicted_class for v in countable}
+            if len(classes) < 2:
+                return False, ["unflagged_disagreement claimed but every "
+                               "countable verdict agrees"]
+        if code == "miscounted_receipt" and len(countable) == len(verdicts):
+            return False, ["miscounted_receipt claimed but every receipt is "
+                           "valid"]
     return True, [str(r)[:300] for r in reasons]
 
 
@@ -101,4 +141,4 @@ def run_critic(verdicts: list, flags: list[str],
         _unload()  # sequential GPU: free LLM VRAM before tool phases
     except Exception:
         pass
-    return parse_objection(raw, len(verdicts))
+    return parse_objection(raw, len(verdicts), verdicts=verdicts)

@@ -284,7 +284,7 @@ check("cleaned-empty-is-none",
 check("orchestrator-uses-cleaned", "resolve_cleaned_image(" in orch_text
       and '"cleaned_image"' in orch_text)
 check("orchestrator-active-record", "active_record" in orch_text
-      and orch_text.count("verify_receipt(c, active_record, manifest)") == 2)
+      and orch_text.count("verify_receipts(c, active_record, manifest)") == 2)
 
 print(f"{len(failures)} failures")
 raise SystemExit(1 if failures else 0)

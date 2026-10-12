@@ -15,11 +15,16 @@ from control.schemas import HAM10000_CLASSES, VerdictEnvelope
 
 JSON_INSTRUCTION = """\
 You MUST reply with exactly one JSON object and no other text.
-Schema: {"ran": bool, "command": string, "exit_code": int|null, \
+Schema: {"ran": bool, "command": string, "commands": [string], \
+"exit_code": int|null, \
 "predicted_class": one of %s|null, \
 "confidence": number in [0,1]|null, "reasoning": string, \
 "uncertainty_flags": subset of ["borderline","no_evidence",\
 "tool_failed","disagreement"]}.
+`commands` MUST list EVERY tool line you actually ran, one string per
+command, copied exactly. `command` repeats the first one. Dropping a tool
+you ran is a false report: every listed command is re-executed and
+counted, and a tool you hide cannot corroborate or contradict anything.
 If you could not run a tool, set ran=false and explain in reasoning.
 Report the exact command you ran plus your reasoning in words.
 The command MUST start with the word python and name a tools/*.py file \

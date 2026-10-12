@@ -27,7 +27,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from control.confidence import DEFAULT_ENTROPY_THRESHOLD  # noqa: E402
+from control.confidence import env_entropy_threshold  # noqa: E402
 from control.confidence import evaluate as entropy_gate  # noqa: E402
 from control.schemas import HAM10000_CLASSES  # noqa: E402
 from control.vram import check as vram_check  # noqa: E402
@@ -179,7 +179,7 @@ def main(tool_name: str, model_dir_name: str, tier: str,
             probs = torch.softmax(logits / temperature, dim=1)[0]
 
         dist = {classes[i]: float(probs[i]) for i in range(len(classes))}
-        gate = entropy_gate(dist, entropy_threshold=DEFAULT_ENTROPY_THRESHOLD)
+        gate = entropy_gate(dist, entropy_threshold=env_entropy_threshold())
         idx = classes.index(gate["top_class"])
         print(json.dumps({
             "status": "success",
@@ -192,7 +192,7 @@ def main(tool_name: str, model_dir_name: str, tier: str,
             "class_probabilities": {k: round(v, 6)
                                     for k, v in sorted(dist.items())},
             "entropy": gate["entropy"],
-            "entropy_threshold": DEFAULT_ENTROPY_THRESHOLD,
+            "entropy_threshold": env_entropy_threshold(),
             "temperature": temperature,
             "melanoma_logit_bias": melanoma_bias,
             "temperature_source": temp_source,

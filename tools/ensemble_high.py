@@ -29,7 +29,7 @@ ensure_runtime(("torch", "torchvision", "PIL"))
 
 from torchvision import transforms  # noqa: E402
 
-from control.confidence import DEFAULT_ENTROPY_THRESHOLD  # noqa: E402
+from control.confidence import env_entropy_threshold  # noqa: E402
 from control.confidence import evaluate as entropy_gate  # noqa: E402
 from tools.ham10000_cnn import (  # noqa: E402
     ISIC_TO_CLASS,
@@ -181,7 +181,7 @@ def main() -> int:
         classes = sorted(set(dist_a) | set(dist_b))
         avg = {c: round((dist_a.get(c, 0.0) + dist_b.get(c, 0.0)) / 2.0, 4)
                for c in classes}
-        gate = entropy_gate(avg, entropy_threshold=DEFAULT_ENTROPY_THRESHOLD)
+        gate = entropy_gate(avg, entropy_threshold=env_entropy_threshold())
         top_a = max(dist_a, key=dist_a.get)
         top_b = max(dist_b, key=dist_b.get)
         members_agree = top_a == top_b
@@ -197,7 +197,7 @@ def main() -> int:
             "disease_name": gate["top_class"],
             "confidence_score": gate["confidence"],
             "entropy": gate["entropy"],
-            "entropy_threshold": DEFAULT_ENTROPY_THRESHOLD,
+            "entropy_threshold": env_entropy_threshold(),
             "members": {
                 "ham10000-cnn": {"class": top_a,
                                  "confidence": round(dist_a[top_a], 4)},

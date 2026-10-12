@@ -28,12 +28,45 @@ BRAIN_SCHEMA = (
     '"stop": bool, "why": string}'
 )
 
+# Numeric scores are stripped from the steer before it reaches a session:
+# the Brain reads re-executed receipts and tends to quote them, which both
+# breaches the no-transcription rule and anchors the next "independent"
+# session on the previous answer. The Brain keeps the numbers; the session
+# sees the instruction only.
+_SCORE_RE = _re.compile(
+    r"(?<![\w.])\d+\.\d+(?![\w.])|\b\d{1,3}(?:\.\d+)?\s?%"
+)
+
+# The report footer belongs to the renderer. Brain steers echoed it into
+# the session prompt, where it read like part of the instruction.
+_FOOTER_RE = _re.compile(
+    r"research use only\s*[—–-]?\s*not a medical diagnosis\.?",
+    _re.IGNORECASE,
+)
+
+
+def sanitize_steer(text: str) -> str:
+    """Remove numeric confidence scores from a steer note."""
+    cleaned = _SCORE_RE.sub("a numeric score", text or "")
+    # Collapse the awkward wording a substitution leaves behind
+    # ("a numeric score confidence", "a numeric score sure").
+    cleaned = _re.sub(
+        r"a numeric score\s+(?:confidence|probability|score|surety|sure|"
+        r"confident)\b",
+        "a numeric score", cleaned, flags=_re.IGNORECASE)
+    # Collapse the stutter left by neighbouring scores ("score score").
+    cleaned = _re.sub(
+        r"(?:a numeric score)(?:[ ,;]*(?:a numeric score))+",
+        "a numeric score", cleaned)
+    return _FOOTER_RE.sub("", cleaned).strip()
+
+
 
 def diagnostic_pool(manifest) -> list[str]:
     """Hintable diagnostic names: ready + diagnostic, minus VLM/failed.
 
     A tool with a local calibration record that did not clear the 0.60
-    accuracy / 0.10 ECE / 0.70 melanoma-recall gate stays OUT of the pool
+    accuracy / 0.10 ECE / 0.90 melanoma-recall gate stays OUT of the pool
     even though its CLI still runs. With no calibration artifacts (fresh
     clone) nothing is blocked, so the pool degrades to the manifest alone.
     """
@@ -59,12 +92,28 @@ def build_brain_prompt(record: dict, quality_text: str,
             f"confidence={h['confidence']}, "
             f"flags={h['flags'] or 'none'}, "
             f"tools={h['tools'] or 'unknown'}, "
+            f"results=[{h.get('results', '')}], "
             f"reasoning={h['reasoning'][:250]}"
             for h in history
         )
         step = ("Previous sessions (re-executed receipts):\n" + receipts +
                 "\nName the weak point, say what NOT to repeat, suggest "
                 "what to verify instead — or stop if the evidence is enough.")
+        # Informational only (the Brain still decides): tell it when the
+        # pool is exhausted with one agreeing class, so a third identical
+        # dual-model session is a knowing choice rather than an oversight.
+        ran_tools = {
+            tool.strip().replace("-", "_")
+            for h in history
+            for tool in str(h.get("tools") or "").split("+")
+            if tool.strip()
+        }
+        pool_tools = {name.replace("-", "_") for name in pool_names}
+        classes = {h.get("class") for h in history if h.get("class")}
+        if pool_tools and pool_tools <= ran_tools and len(classes) == 1:
+            step += ("\nEvery hintable tool has already been receipted this "
+                     "round and they agree on one class: re-running the same "
+                     "tools adds no new evidence.")
     return (
         f"{role_text}\n"
         f"Case metadata (context only): {metadata}\n"
@@ -126,10 +175,10 @@ def parse_brain_order(raw: str, pool_names: list[str]) -> dict:
         return stopped("invalid suggested_subset: must be a list of names")
     hint = [n for n in subset if n in pool]
     return {
-        "steer": steer_text[:1500],
+        "steer": sanitize_steer(steer_text)[:1500],
         "suggested_subset": hint,
         "stop": stop,
-        "why": why.strip()[:500],
+        "why": _FOOTER_RE.sub("", why).strip()[:500],
     }
 
 
@@ -295,12 +344,28 @@ def run_specialist_briefs(diseases: list[str], history: list[dict],
 
 
 def receipt_summary(verdict, n: int, tools: str = "") -> dict:
-    """Text-only receipt digest of one re-executed session for the Brain."""
+    """Text-only receipt digest of one re-executed session for the Brain.
+
+    `verdict` may be one envelope or the list of envelopes a session
+    earned (one per tool). Every tool is listed so the Brain can see a
+    cross-model disagreement instead of one truncated row.
+    """
+    items = list(verdict) if isinstance(verdict, (list, tuple)) else [verdict]
+    primary = max(items, key=lambda v: v.confidence or 0.0)
+    results = "; ".join(
+        f"{session_tools(v.command)}={v.predicted_class}"
+        + (f"({v.confidence})" if v.confidence is not None else "")
+        + (f" flags={','.join(v.uncertainty_flags)}"
+           if v.uncertainty_flags else "")
+        for v in items
+    )
     return {
         "n": n,
-        "class": verdict.predicted_class,
-        "confidence": verdict.confidence,
-        "flags": ",".join(verdict.uncertainty_flags),
+        "class": primary.predicted_class,
+        "confidence": primary.confidence,
+        "flags": ",".join(dict.fromkeys(
+            f for v in items for f in v.uncertainty_flags)),
         "tools": tools,
-        "reasoning": verdict.reasoning or "",
+        "results": results,
+        "reasoning": primary.reasoning or "",
     }

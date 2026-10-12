@@ -142,8 +142,8 @@ runner_mod.run_openclaw_cli = _cli_factory(
 try:
     out = run_session(record, case_text, _verify, quality_text="Q",
                       steer="S")
-    check("repair-converts-rejection", out.ran is True
-          and out.predicted_class == "Melanoma"
+    check("repair-converts-rejection", out[0].ran is True
+          and out[0].predicted_class == "Melanoma"
           and len(calls) == 2, f"{out} calls={len(calls)}")
     check("repair-prompt-names-defect", BAD in calls[1]
           and "REJECTED" in calls[1] and "EXACT lines" in calls[1])
@@ -158,7 +158,7 @@ calls.clear()
 runner_mod.run_openclaw_cli = _cli_factory([_envelope("x", ran=False)])
 try:
     out = run_session(record, case_text, _verify)
-    check("genuine-false-untouched", out.ran is False
+    check("genuine-false-untouched", out[0].ran is False
           and len(calls) == 1, f"{out} calls={len(calls)}")
 except Exception as exc:  # noqa: BLE001
     check("genuine-false-untouched", False, f"raised: {exc}")
@@ -171,7 +171,7 @@ runner_mod.run_openclaw_cli = _cli_factory(
     [_envelope(BAD), _envelope("also bad")])
 try:
     out = run_session(record, case_text, _verify)
-    check("double-rejection-stands", out.ran is False
+    check("double-rejection-stands", out[0].ran is False
           and len(calls) == 2, f"{out} calls={len(calls)}")
 except Exception as exc:  # noqa: BLE001
     check("double-rejection-stands", False, f"raised: {exc}")
@@ -188,9 +188,51 @@ def _boom_verify(claimed):
 runner_mod.run_openclaw_cli = _cli_factory([_envelope(GOOD)])
 try:
     out = run_session(record, case_text, _boom_verify)
-    check("verify-crash-safe", out.ran is False, str(out))
+    check("verify-crash-safe", out[0].ran is False, str(out))
 except Exception as exc:  # noqa: BLE001
     check("verify-crash-safe", False, f"raised: {exc}")
+finally:
+    runner_mod.run_openclaw_cli = _real
+
+# 3e. A session may run 1..n tools: every claimed command is verified
+# and returned as its own row, so a second (possibly disagreeing) model
+# cannot disappear behind the first one.
+SECOND = ("python tools/isic_vit.py --image "
+          "dataset/ISIC2019_test/ISIC_0000002.jpg")
+
+
+def _envelope_two(command):
+    return {"ran": True, "command": command,
+            "commands": [GOOD, SECOND], "exit_code": 0,
+            "predicted_class": None, "confidence": None,
+            "reasoning": "ran both", "uncertainty_flags": []}
+
+
+def _verify_all(claimed):
+    rows = []
+    for cmd in claimed.command_list():
+        rows.append(VerdictEnvelope(
+            ran=True, command=cmd, exit_code=0,
+            predicted_class=("Melanoma" if "vit" in cmd
+                             else "Melanocytic nevi"),
+            confidence=0.8, reasoning="re-executed",
+            uncertainty_flags=[]))
+    return rows
+
+
+calls.clear()
+runner_mod.run_openclaw_cli = _cli_factory([_envelope_two(GOOD)])
+try:
+    out = run_session(record, case_text, _verify_all)
+    check("multi-tool-all-receipted", len(out) == 2
+          and {v.predicted_class for v in out} == {"Melanoma",
+                                                   "Melanocytic nevi"},
+          str(out))
+    check("multi-tool-disagreement-visible",
+          len({v.command for v in out}) == 2, str(out))
+except Exception as exc:  # noqa: BLE001
+    check("multi-tool-all-receipted", False, f"raised: {exc}")
+    check("multi-tool-disagreement-visible", False, f"raised: {exc}")
 finally:
     runner_mod.run_openclaw_cli = _real
 
@@ -218,9 +260,9 @@ runner_mod.run_openclaw_cli = _cli_factory(
     [_envelope(GOOD, cls=None, conf=None)])
 try:
     out = run_session(record, case_text, _verify)
-    check("null-claim-filled", out.ran is True
-          and out.predicted_class == "Melanoma"
-          and out.confidence == 0.7 and len(calls) == 1,
+    check("null-claim-filled", out[0].ran is True
+          and out[0].predicted_class == "Melanoma"
+          and out[0].confidence == 0.7 and len(calls) == 1,
           f"{out} calls={len(calls)}")
 except Exception as exc:  # noqa: BLE001
     check("null-claim-filled", False, f"raised: {exc}")

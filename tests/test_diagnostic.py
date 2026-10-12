@@ -70,8 +70,9 @@ check("prompt-has-image", "img.jpg" in prompt)
 check("prompt-has-quality", "Quality: pass" in prompt)
 check("prompt-has-steer", "Check the border." in prompt)
 check("prompt-hint-is-hint", "HINT only" in prompt)
-check("prompt-has-pool", "ham10000-cnn" in prompt
-      and "isic-resnet50" in prompt)
+check("prompt-has-pool", bool(pool)
+      and all(name in prompt for name in pool),
+      f"pool={pool}")
 check("prompt-hides-support", "quality_gate" not in prompt
       and "abcde_analyzer" not in prompt)
 check("prompt-isolates-sessions", "invisible to you" in prompt

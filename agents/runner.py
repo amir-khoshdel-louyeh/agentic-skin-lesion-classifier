@@ -73,6 +73,9 @@ def build_agent_prompt(
         "use the case image. Never refuse for a missing cleaned image.\n"
         "- Quality flags NEVER block tool execution — run regardless of "
         "the Quality verdict.\n"
+        "- List EVERY line you ran in `commands` (one string per tool, "
+        "copied exactly). A tool you ran but omit is a false report and "
+        "its evidence is lost to the referee.\n"
         "- In your envelope, set predicted_class and confidence to null "
         "ALWAYS. NEVER write tool numbers from memory — control fills "
         "them from re-execution. Explain WHY you chose these tools, not "
@@ -167,6 +170,17 @@ def build_receipt_repair_prompt(bad_command: str, reason: str,
     )
 
 
+def _as_verdicts(verified) -> list[VerdictEnvelope]:
+    """Normalise a verifier result to a list (one envelope per tool)."""
+    if isinstance(verified, VerdictEnvelope):
+        return [verified]
+    got = list(verified or [])
+    return got or [VerdictEnvelope(
+        ran=False, command="(no receipt)",
+        reasoning="Verification produced no verdict",
+        uncertainty_flags=["tool_failed"])]
+
+
 def run_session(
     record: dict,
     manifest_text: str,
@@ -175,33 +189,36 @@ def run_session(
     quality_text: str = "",
     steer: str = "",
     hint: tuple | list = (),
-) -> VerdictEnvelope:
+) -> list[VerdictEnvelope]:
     """Claim → verify → one targeted repair on receipt rejection.
 
-    `verify` is a callable taking a VerdictEnvelope and returning the
-    re-executed VerdictEnvelope (e.g. a verify_receipt partial). Genuine
-    ran=false passes through untouched — only a *claimed* run whose
-    command the referee rejects gets exactly one correction retry.
+    `verify` is a callable taking a VerdictEnvelope and returning either
+    one re-executed VerdictEnvelope or a LIST of them (one per command the
+    session claims to have run — a session may run 1..n tools, and every
+    one of them must be receipted). The return value is always a list.
+    Genuine ran=false passes through untouched — only a *claimed* run
+    whose commands the referee rejected gets exactly one correction retry.
     Never raises: verification errors become no-evidence.
     """
     claimed = run_agent(record, manifest_text, agent_id=agent_id,
                         quality_text=quality_text, steer=steer, hint=hint)
     try:
-        verified = verify(claimed)
+        verified = _as_verdicts(verify(claimed))
     except Exception as exc:  # noqa: BLE001 - referee must not crash
-        return VerdictEnvelope(
+        return [VerdictEnvelope(
             ran=False,
             command=claimed.command,
             reasoning=f"Verification failed: {exc}",
             uncertainty_flags=["tool_failed"],
-        )
-    if not (claimed.ran and not verified.ran
-            and verified.reasoning.startswith(RECEIPT_REJECTED)):
+        )]
+    rejected = [v for v in verified
+                if not v.ran and v.reasoning.startswith(RECEIPT_REJECTED)]
+    if not (claimed.ran and len(rejected) == len(verified)):
         return verified
     try:
         repair_raw = extract_text(run_openclaw_cli(
             build_receipt_repair_prompt(claimed.command,
-                                        verified.reasoning,
+                                        verified[0].reasoning,
                                         manifest_text, quality_text,
                                         steer),
             agent_id=agent_id,
@@ -214,6 +231,6 @@ def run_session(
     except EnvelopeError:
         return verified
     try:
-        return verify(corrected)
+        return _as_verdicts(verify(corrected))
     except Exception:  # noqa: BLE001 - keep the first rejection
         return verified

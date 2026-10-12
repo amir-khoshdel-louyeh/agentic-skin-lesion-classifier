@@ -39,15 +39,43 @@ def verdict(cls="Melanocytic nevi", conf=0.85, flags=()):
         reasoning="r", uncertainty_flags=list(flags))
 
 
-def obj(objection=True, reasons=None, cites=None):
-    return json.dumps({"objection": objection,
-                       "reasons": reasons if reasons is not None else ["low"],
-                       "cites": cites if cites is not None else ["Verdict 1"]})
+def obj(objection=True, reasons=None, cites=None,
+        code="unflagged_disagreement"):
+    payload = {"objection": objection,
+               "reasons": reasons if reasons is not None else ["low"],
+               "cites": cites if cites is not None else ["Verdict 1"]}
+    if code is not None:
+        payload["code"] = code
+    return json.dumps(payload)
 
 
 # 1. Object-with-cites sustains; everything else is silence.
 sustained, _ = parse_objection(obj(), 2)
 check("sustains-with-cites", sustained is True)
+
+# 1b. Only actionable defect codes may object. Quality/blur objections are
+# handled deterministically by the referee, so they must never sustain.
+for name, raw in (
+        ("no-code-silence", obj(code=None)),
+        ("quality-code-silence", obj(code="quality_ignored")),
+        ("blur-code-silence", obj(code="blurry")),
+        ("unknown-code-silence", obj(code="something_else"))):
+    sustained, _ = parse_objection(raw, 2)
+    check(name, sustained is False, raw[:60])
+
+# 1c. A code is validated against the evidence it names.
+agreeing = [verdict("Melanoma", 0.9), verdict("Melanoma", 0.87)]
+sustained, why = parse_objection(obj(code="unflagged_disagreement"), 2,
+                                 verdicts=agreeing)
+check("disagreement-code-needs-disagreement", sustained is False,
+      str(why))
+disagreeing = [verdict("Melanoma", 0.9), verdict("Benign keratosis", 0.88)]
+sustained, _ = parse_objection(obj(code="unflagged_disagreement"), 2,
+                               verdicts=disagreeing)
+check("disagreement-code-holds-when-real", sustained is True)
+sustained, why = parse_objection(obj(code="miscounted_receipt"), 2,
+                                 verdicts=agreeing)
+check("receipt-code-needs-bad-receipt", sustained is False, str(why))
 for name, raw in (
         ("false-is-silence", obj(objection=False)),
         ("missing-reasons-silence", obj(reasons=[])),
@@ -80,6 +108,10 @@ check("prompt-has-receipts", "Melanoma" in prompt and "0.62" in prompt)
 check("prompt-has-quality", "Quality: flagged" in prompt)
 check("prompt-asymmetric", "may NOT" in prompt and "confirm" in prompt)
 check("prompt-cites-required", "MUST cite" in prompt)
+check("prompt-requires-defect-code",
+      "unflagged_disagreement" in prompt
+      and "miscounted_receipt" in prompt)
+check("prompt-quality-has-no-code", "no code" in prompt)
 
 # 4. Sustained objection forces suspicious-refer; silence changes nothing.
 d = decide([verdict()], critic_objection=True)

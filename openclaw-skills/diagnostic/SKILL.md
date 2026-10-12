@@ -36,7 +36,8 @@ Reply with exactly one JSON verdict envelope, no other text:
 ```json
 {
   "ran": true,
-  "command": "<exact executed command>",
+  "command": "<first exact executed command>",
+  "commands": ["<every exact executed command>"],
   "exit_code": 0,
   "predicted_class": null,
   "confidence": null,

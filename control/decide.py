@@ -2,10 +2,14 @@
 
 Rules (locked layer, not doctor-editable):
 - Only receipted verdicts count (command + exit_code 0 + known class).
-- ANY melanoma vote at/above threshold OR ANY borderline flag forces
-  "suspicious — refer to physician", never a confident benign.
+- ANY melanoma vote at/above threshold, ANY tool borderline flag, ANY
+  confidence below the confidence floor, or an unresolved quality flag
+  forces "suspicious — refer to physician", never a confident benign.
 - Zero countable verdicts => "inconclusive — no evidence".
-- Otherwise weighted majority wins.
+- Otherwise weighted majority wins. One vote per TOOL: re-running the
+  same model is not independent confirmation.
+- Machine rules run before the critic, so Part A always names a
+  reproducible reason when one exists.
 """
 
 import json
@@ -26,6 +30,8 @@ RULE_MALIGNANCY = "malignancy_vote"
 RULE_BORDERLINE = "borderline_flag"
 RULE_MAJORITY = "weighted_majority"
 RULE_DILEMMA = "specialist_dilemma"
+RULE_QUALITY = "quality_flagged"
+RULE_CONFIDENCE = "confidence_floor"
 
 
 def reliability_of(reasoning: str) -> str:
@@ -35,8 +41,9 @@ def reliability_of(reasoning: str) -> str:
     tag (e.g. careful-path extras, legacy notes) reports "unknown".
     Never a vote gate — Part A display only.
     """
-    match = _re.search(r"reliability=(exact|rounded|fabricated|omitted)",
-                       reasoning or "")
+    match = _re.search(
+        r"reliability=(exact|rounded|fabricated|omitted|class_mismatch)",
+        reasoning or "")
     return match.group(1) if match else "unknown"
 
 
@@ -53,7 +60,9 @@ def decide(
     verdicts: list[VerdictEnvelope],
     weights: dict[int, float] | None = None,
     borderline_threshold: float = 0.75,
+    confidence_threshold: float = 0.75,
     critic_objection: bool = False,
+    quality_flagged: bool = False,
 ) -> dict[str, object]:
     # plan.tmp T5: single-writer lock. ONLY re-executed VerdictEnvelopes
     # may vote. Anything else (e.g. a Quality Agent dict, critic text,
@@ -71,31 +80,79 @@ def decide(
             "reason": "no receipted verdicts",
             "rule": RULE_NO_EVIDENCE,
             "verdicts_counted": 0,
+            "distinct_tools": 0,
         }
-    if critic_objection:
-        return {
-            "decision": "suspicious",
-            "reason": "sustained critic objection",
-            "rule": RULE_CRITIC,
-            "verdicts_counted": len(countable),
-        }
+    # One vote per TOOL, not per session. Running the same model twice must
+    # never look like two independent confirmations (it used to: two rows
+    # of isic_vit counted as "2 verdicts").
+    best: dict[str, VerdictEnvelope] = {}
     for v in countable:
+        tool = receipt_tool(v.command)
+        if tool not in best or (v.confidence or 0.0) > (best[tool].confidence or 0.0):
+            best[tool] = v
+    unique = list(best.values())
+    counted = len(countable)
+    # Machine rules run FIRST and in order of specificity. The critic is an
+    # LLM voice: it may only raise suspicion when no deterministic rule
+    # already fired, so Part A always reports a reproducible reason.
+    for v in unique:
         if v.predicted_class == MALIGNANT_CLASS and (v.confidence or 0.0) >= borderline_threshold:
             return {
                 "decision": "suspicious",
                 "reason": f"malignancy vote ({v.confidence})",
                 "rule": RULE_MALIGNANCY,
-                "verdicts_counted": len(countable),
+                "verdicts_counted": counted,
+                "distinct_tools": len(unique),
             }
         if "borderline" in v.uncertainty_flags or (v.confidence or 0.0) < borderline_threshold:
             return {
                 "decision": "suspicious",
                 "reason": f"borderline verdict ({v.predicted_class}, {v.confidence})",
                 "rule": RULE_BORDERLINE,
-                "verdicts_counted": len(countable),
+                "verdicts_counted": counted,
+                "distinct_tools": len(unique),
             }
+    # confidence_threshold is the minimum confidence a BENIGN conclusion
+    # may rest on. Raising it in the doctor file flags more cases, which
+    # is what prompts.py promises; at the default it coincides with the
+    # borderline rule above and changes nothing.
+    weak = [v for v in unique
+            if v.confidence is not None and v.confidence < confidence_threshold]
+    if weak:
+        worst = min(weak, key=lambda v: v.confidence or 0.0)
+        return {
+            "decision": "suspicious",
+            "reason": (f"confidence below floor ({worst.predicted_class}, "
+                       f"{worst.confidence} < {confidence_threshold})"),
+            "rule": RULE_CONFIDENCE,
+            "verdicts_counted": counted,
+            "distinct_tools": len(unique),
+        }
+    # A flagged image may never end as "benign": the quality verdict is a
+    # machine measurement, so it binds here instead of relying on an LLM
+    # critic to notice it. Malignancy/borderline rules above keep their
+    # more specific reasons when they fire first.
+    if quality_flagged:
+        return {
+            "decision": "suspicious",
+            "reason": ("image quality unresolved (flagged) — re-capture or "
+                       "review before relying on this screening"),
+            "rule": RULE_QUALITY,
+            "verdicts_counted": counted,
+            "distinct_tools": len(unique),
+        }
+    if critic_objection:
+        return {
+            "decision": "suspicious",
+            "reason": "sustained critic objection",
+            "rule": RULE_CRITIC,
+            "verdicts_counted": counted,
+            "distinct_tools": len(unique),
+        }
     tally: dict[str, float] = {}
-    for i, v in enumerate(countable):
+    for i, v in enumerate(unique):
+        # Weights are keyed by the deduped position: a tool's evidence is
+        # counted once, no matter how many sessions re-ran it.
         w = (weights or {}).get(i, 1.0)
         tally[v.predicted_class] = tally.get(v.predicted_class, 0.0) + w
     winner = max(tally, key=tally.get)
@@ -103,7 +160,8 @@ def decide(
         "decision": "benign",
         "reason": f"weighted majority: {winner} ({tally[winner]})",
         "rule": RULE_MAJORITY,
-        "verdicts_counted": len(countable),
+        "verdicts_counted": counted,
+        "distinct_tools": len(unique),
         "final_class": winner,
     }
 
@@ -123,6 +181,7 @@ def build_report(
     critic: dict | None = None,
     specialist_texts: list[dict] | None = None,
     qa: list[dict] | None = None,
+    provenance: dict | None = None,
     include_part_b: bool = True,
 ) -> str:
     """Two-part round report (plan.tmp §7).
@@ -139,22 +198,38 @@ def build_report(
         "",
         f"- Image: {record.get('image_path')}",
         f"- Metadata: {json.dumps(record.get('metadata', {}), ensure_ascii=False)}",
+    ]
+    if provenance:
+        if provenance.get("image_sha256"):
+            lines.append(f"- Image sha256: {provenance['image_sha256']}")
+        if provenance.get("backend"):
+            lines.append(f"- Backend: {provenance['backend']}")
+        if provenance.get("started_at"):
+            lines.append(f"- Round started: {provenance['started_at']}")
+    lines += [
         "",
         "## Part A — Decision source (machine, authoritative)",
         "",
         "### Receipts (re-executed numbers only)",
         "",
-        "| # | tool | class | confidence | flags | reliability |",
-        "|---|------|-------|------------|-------|-------------|",
+        "| # | tool | class | confidence | flags (tool) | flags (agent) | reliability |",
+        "|---|------|-------|------------|--------------|---------------|-------------",
     ]
     for i, v in enumerate(verdicts):
+        agent_flags = ",".join(str(f)[:40] for f in v.agent_flags) or "none"
         lines.append(
             f"| {i + 1} | {receipt_tool(v.command)} | "
             f"{v.predicted_class or '—'} | "
             f"{v.confidence if v.confidence is not None else '—'} | "
             f"{','.join(v.uncertainty_flags) or 'none'} | "
+            f"{agent_flags} | "
             f"{reliability_of(v.reasoning)} |"
         )
+    tools_seen = [receipt_tool(v.command) for v in verdicts
+                  if v.is_countable()]
+    if len(tools_seen) > len(set(tools_seen)):
+        lines += ["", "- Note: repeated rows come from the same tool and add "
+                  "no independent evidence; the referee counts each tool once."]
     lines += ["", "### Quality"]
     if quality:
         cleaned = (f" → {quality['cleaned_image']}"
@@ -165,8 +240,11 @@ def build_report(
             "",
             f"- Quality: **{quality.get('verdict', 'flagged')}**{cleaned}",
             f"- Reasons: {'; '.join(quality.get('reasons', []))}",
-            f"- Cites: {cites or 'none'}",
+            f"- Cites (agent): {cites or 'none'}",
         ]
+        control_cites = quality.get("control_cites") or []
+        if control_cites:
+            lines.append(f"- Gate (control): {'; '.join(control_cites[:2])}")
     else:
         lines += ["", "- Quality: not recorded this round."]
     lines += [
@@ -175,7 +253,10 @@ def build_report(
         "",
         f"- Decision: **{decision['decision']}** — {decision['reason']}",
         f"- Formula: rule={decision.get('rule', 'unknown')} "
-        f"(verdicts counted: {decision.get('verdicts_counted', 0)})",
+        f"(verdicts counted: {decision.get('verdicts_counted', 0)}"
+        + (f", distinct tools: {decision['distinct_tools']}"
+           if "distinct_tools" in decision else "")
+        + ")",
     ]
     if thresholds:
         lines.append(

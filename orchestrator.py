@@ -5,6 +5,7 @@ one-way escalation, Markdown report + JSONL audit. No diagnostic tools
 here — control only.
 """
 
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,6 +17,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from agents.runner import run_session
+from control.confidence import ENTROPY_ENV
 from control.critic import run_critic
 from control.decide import (RULE_DILEMMA, append_audit, build_report, decide,
                        reliability_of)
@@ -34,6 +36,20 @@ from control.router import run_abcde
 from control.schemas import VerdictEnvelope
 
 
+def file_sha256(path) -> str:
+    """Content hash for provenance (empty string when unreadable)."""
+    import hashlib
+
+    try:
+        digest = hashlib.sha256()
+        with open(path, "rb") as handle:
+            for chunk in iter(lambda: handle.read(1 << 20), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+    except OSError:
+        return ""
+
+
 def load_record(prompt_file: Path, index: int) -> dict:
     records = yaml.safe_load(prompt_file.read_text(encoding="utf-8"))
     if index < 0 or index >= len(records):
@@ -46,11 +62,16 @@ def verify_receipt(
     record: dict,
     manifest,  # control.manifest.Manifest
     timeout: int = 300,
+    command: str | None = None,
 ) -> VerdictEnvelope:
     """Re-execute the claimed command control-side. Self-reported receipts
     are NOT trusted: mismatch => ran=False (no evidence). Only commands
     of the form `python tools/<ready-tool>.py --image <record image>
-    [--metadata ...]` are eligible; anything else is rejected outright."""
+    [--metadata ...]` are eligible; anything else is rejected outright.
+
+    `command` overrides the envelope's primary command, so one session's
+    1..n commands can each be receipted (see verify_receipts).
+    """
     import json as _json
     import shlex
     import subprocess
@@ -61,18 +82,21 @@ def verify_receipt(
     except Exception:
         pass
 
+    cmd_text = (command or claimed.command or "").strip()
+
     def rejected(reason: str) -> VerdictEnvelope:
         return VerdictEnvelope(
             ran=False,
-            command=claimed.command,
+            command=cmd_text or claimed.command,
             reasoning=f"Receipt rejected: {reason}",
             uncertainty_flags=["tool_failed"],
+            agent_flags=list(claimed.uncertainty_flags),
         )
 
     if not claimed.ran or claimed.exit_code != 0:
         return claimed
     try:
-        parts = shlex.split(claimed.command)
+        parts = shlex.split(cmd_text)
     except ValueError:
         return rejected("unparseable command")
     if len(parts) < 4 or parts[0] != "python" or parts[2] != "--image":
@@ -133,24 +157,69 @@ def verify_receipt(
         reliability = "rounded"
     else:
         reliability = "fabricated"
+    # A class the agent named that the tool did not produce is its own
+    # integrity signal (the old code had no class-mismatch branch at all).
+    # Display only: agent text still never moves the verdict.
+    actual_cls = actual.get("disease_name")
+    if claimed.predicted_class and actual_cls \
+            and claimed.predicted_class != actual_cls:
+        reliability = "class_mismatch"
+    # Flags come from the TOOL's own JSON (entropy gate, quality gate),
+    # never from agent prose. An agent-declared "borderline" is kept in
+    # agent_flags as an advisory signal only: it used to flow straight into
+    # the referee, which let a session invent a referral.
+    tool_flags = [
+        f for f in (actual.get("uncertainty_flags") or [])
+        if f in ("borderline", "no_evidence", "tool_failed", "disagreement")
+    ]
     flags = list(dict.fromkeys(
-        list(claimed.uncertainty_flags)
+        tool_flags
         + (["disagreement"] if drift is not None and drift > 0.01 else [])))
     note = (f"{claimed.reasoning} [control: agent said "
             f"{claimed.predicted_class}/{claimed_conf}; "
             f"reliability={reliability}]")
     return VerdictEnvelope(
         ran=True,
-        command=claimed.command,
+        command=cmd_text,
+        commands=[cmd_text],
         exit_code=0,
         predicted_class=actual.get("disease_name"),
         confidence=(None if actual_conf is None
                     else float(actual_conf)),
         reasoning=note,
-        uncertainty_flags=[f for f in flags
-                           if f in ("borderline", "no_evidence",
-                                    "tool_failed", "disagreement")],
+        uncertainty_flags=flags,
+        agent_flags=list(claimed.uncertainty_flags),
     )
+
+
+def verify_receipts(
+    claimed: VerdictEnvelope,
+    record: dict,
+    manifest,  # control.manifest.Manifest
+    timeout: int = 300,
+) -> list[VerdictEnvelope]:
+    """Receipt EVERY command a session claims, one envelope per tool.
+
+    A session may run 1..n tools (plan.tmp §2.3). Receipting only the
+    first hid the second model's result — including a disagreement — so
+    each distinct tool is re-executed and returned as its own row. A tool
+    repeated within one session is executed once (duplicates add no
+    independent evidence). If every command is rejected, the rejections
+    are returned so the round records "no evidence" instead of silence.
+    """
+    from control.decide import receipt_tool
+
+    out: list[VerdictEnvelope] = []
+    seen: set[str] = set()
+    for cmd in claimed.command_list():
+        verdict = verify_receipt(claimed, record, manifest,
+                                 timeout=timeout, command=cmd)
+        tool = receipt_tool(cmd)
+        if tool in seen:
+            continue
+        seen.add(tool)
+        out.append(verdict)
+    return out or [verify_receipt(claimed, record, manifest, timeout=timeout)]
 
 
 def run_ensemble_verdict(record: dict, timeout: int = 600,
@@ -218,7 +287,11 @@ def run_round(
     # Physician customization (Phase 8): the doctor's validated thresholds
     # drive the decision — never a hardcoded constant. Invalid doctor files
     # fail the round fast instead of running with silent defaults.
+    started_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     thresholds = effective_thresholds("orchestrator")
+    # A physician's entropy_threshold edit must reach the model gates, not
+    # just the report text. Every tool subprocess inherits this variable.
+    os.environ[ENTROPY_ENV] = str(thresholds["entropy_threshold"])
     if borderline_threshold is None:
         borderline_threshold = thresholds["borderline_threshold"]
     if careful:
@@ -298,6 +371,16 @@ def run_round(
     # transcription errors cannot happen.
     diag_manifest_text = render_subset_for_case(
         manifest, tuple(pool_names), active_record)
+    # Reproducibility: hash the exact bytes the receipts were executed
+    # against, plus the backend that produced the LLM voices. Without this
+    # two runs of the same case are indistinguishable after the fact.
+    provenance = {
+        "image_sha256": file_sha256(active_record.get("image_path")),
+        "original_image_sha256": file_sha256(record.get("image_path")),
+        "backend": (f"openclaw agent={agent_id} "
+                    "(model id not exposed by the CLI)"),
+        "started_at": started_at,
+    }
     verdicts: list = []
     steers: list[dict] = []
     sessions_log: list[dict] = []
@@ -309,47 +392,62 @@ def run_round(
                            agent_id=agent_id)
     brain_sessions += 1
     while True:
-        steers.append({"session": len(verdicts) + 1, **order})
-        _emit("brain", {"session": len(verdicts) + 1,
+        session_no = len(sessions_log) + 1
+        steers.append({"session": session_no, **order})
+        _emit("brain", {"session": session_no,
                         "stop": bool(order.get("stop")),
                         "steer": order.get("steer", ""),
                         "suggested_subset": order.get(
                             "suggested_subset", []),
                         "why": order.get("why", "")})
-        verified = run_session(
+        verified_list = run_session(
             dict(active_record), diag_manifest_text,
-            lambda c: verify_receipt(c, active_record, manifest),
+            lambda c: verify_receipts(c, active_record, manifest),
             agent_id=agent_id, quality_text=quality_text,
             steer=order["steer"], hint=order["suggested_subset"])
         llm_sessions += 1
-        verdicts.append(verified)
-        _emit("session", {"n": len(verdicts),
+        verdicts.extend(verified_list)
+        # One row per tool receipted; the session's headline verdict is the
+        # most confident one (display only — every row still votes).
+        primary = max(verified_list, key=lambda v: v.confidence or 0.0)
+        tools_text = "+".join(dict.fromkeys(
+            session_tools(v.command) for v in verified_list))
+        _emit("session", {"n": session_no,
                           "steer": order.get("steer", ""),
-                          "class": verified.predicted_class,
-                          "confidence": verified.confidence,
-                          "tools_run": session_tools(verified.command)})
+                          "class": primary.predicted_class,
+                          "confidence": primary.confidence,
+                          "tools_run": tools_text})
         brain_history.append(receipt_summary(
-            verified, len(verdicts),
-            tools=session_tools(verified.command)))
+            verified_list, session_no, tools=tools_text))
         sessions_log.append({
-            "n": len(verdicts),
+            "n": session_no,
             "steer": order["steer"],
             "why": order["why"],
             "suggested_subset": order["suggested_subset"],
-            "tools_run": session_tools(verified.command),
-            "command": verified.command,
-            "class": verified.predicted_class,
-            "confidence": verified.confidence,
-            "reliability": reliability_of(verified.reasoning),
-            "reasoning": verified.reasoning,
+            "tools_run": tools_text,
+            "command": primary.command,
+            "commands": [v.command for v in verified_list],
+            "class": primary.predicted_class,
+            "confidence": primary.confidence,
+            "reliability": reliability_of(primary.reasoning),
+            "reasoning": primary.reasoning,
+            "per_tool": [
+                {"tool": session_tools(v.command),
+                 "class": v.predicted_class,
+                 "confidence": v.confidence,
+                 "reliability": reliability_of(v.reasoning)}
+                for v in verified_list
+            ],
         })
-        if len(verdicts) >= MAX_SESSIONS:
+        if len(sessions_log) >= MAX_SESSIONS:
             break
         order = run_brain_step(record, quality_text, brain_history,
                                pool_names, agent_id=agent_id)
         brain_sessions += 1
         if order.get("stop"):
-            steers.append({"session": len(verdicts) + 1, **order,
+            # Session numbering counts SESSIONS, not receipts: a session
+            # with two tools used to inflate the stop note's number.
+            steers.append({"session": len(sessions_log) + 1, **order,
                            "stopped": True})
             break
     timings["workers_s"] = round(_time.perf_counter() - _t0, 2)
@@ -401,21 +499,26 @@ def run_round(
         record_with_role = dict(active_record)
         record_with_role["role_extra"] = advocate_brief(
             disease, diseases, briefs[disease])
-        verified = confine_specialist(
-            run_session(
+        confined = [
+            confine_specialist(v, disease, diseases)
+            for v in run_session(
                 record_with_role, diag_manifest_text,
-                lambda c: verify_receipt(c, active_record, manifest),
-                agent_id=agent_id, quality_text=quality_text),
-            disease, diseases)
-        specialist_verdicts.append(verified)
+                lambda c: verify_receipts(c, active_record, manifest),
+                agent_id=agent_id, quality_text=quality_text)
+        ]
+        specialist_verdicts.extend(confined)
         _emit("specialist", {"disease": disease,
-                             "class": verified.predicted_class,
-                             "countable": verified.is_countable()})
+                             "class": ", ".join(
+                                 str(v.predicted_class) for v in confined),
+                             "countable": any(v.is_countable()
+                                              for v in confined)})
     timings["specialists_s"] = round(_time.perf_counter() - _t0, 2)
     verdicts.extend(specialist_verdicts)
 
     decision = decide(verdicts, borderline_threshold=borderline_threshold,
-                      critic_objection=critic_sustained)
+                      confidence_threshold=thresholds["confidence_threshold"],
+                      critic_objection=critic_sustained,
+                      quality_flagged=(quality.get("verdict") == "flagged"))
     # Persistent specialist disagreement is named, never averaged away:
     # two confident advocates for different diseases must refer.
     spec_classes = sorted({
@@ -436,12 +539,17 @@ def run_round(
         {"disease": v.predicted_class, "reasoning": v.reasoning}
         for v in specialist_verdicts if v.is_countable()
     ]
+    # Report the thresholds the decision ACTUALLY used (the careful route
+    # tightens borderline_threshold; printing the un-bumped dict would
+    # misstate the rule behind the verdict).
+    report_thresholds = {**thresholds,
+                         "borderline_threshold": borderline_threshold}
     report = build_report(
-        record, verdicts, decision, thresholds=thresholds,
+        record, verdicts, decision, thresholds=report_thresholds,
         quality=quality, steers=steers, sessions=sessions_log,
         critic={"sustained": critic_sustained,
                 "reasons": critic_reasons},
-        specialist_texts=specialist_texts,
+        specialist_texts=specialist_texts, provenance=provenance,
     )
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     out = ROOT_DIR / "report" / f"round_{record_index}_{stamp}.md"
@@ -451,6 +559,7 @@ def run_round(
         "event": "round",
         "record_index": record_index,
         "image": record.get("image_path"),
+        "provenance": provenance,
         "careful": careful,
         "route": route_info,
         "quality": quality,

@@ -74,11 +74,28 @@ COMMAND_FORM_RULE = (
 # in control.quality.resolve_cleaned_image.
 CLEANED_DIR = "report/cleaned"
 
+ROOT_DIR = Path(__file__).resolve().parent.parent
+
+
+def absolute_path(value: str | Path | None) -> str:
+    """Absolute, resolved path for anything handed to an agent.
+
+    Agent sessions execute in the OpenClaw workspace, not in this repo
+    (`cwd=/home/<user>/.openclaw/workspace`), so a relative path in a
+    pre-rendered line can resolve to a different tree than the referee's
+    re-execution. Absolute paths make the session and the receipt agree
+    by construction.
+    """
+    path = Path(str(value or "")).expanduser()
+    if not path.is_absolute():
+        path = ROOT_DIR / path
+    return str(path.resolve())
+
 
 def cleaned_output_path(record: dict) -> str:
-    """Stable scratch path for a case's cleaned image."""
+    """Stable scratch path for a case's cleaned image (absolute)."""
     stem = Path(str(record.get("image_path") or "")).stem
-    return f"{CLEANED_DIR}/{stem or 'case'}_cleaned.jpg"
+    return absolute_path(f"{CLEANED_DIR}/{stem or 'case'}_cleaned.jpg")
 
 
 def render_subset_for_case(manifest: Manifest, names: tuple[str, ...],
@@ -102,7 +119,7 @@ def render_subset_for_case(manifest: Manifest, names: tuple[str, ...],
     unknown = wanted - known
     if unknown:
         raise KeyError(f"Unknown tools in subset: {sorted(unknown)}")
-    image = str(record.get("image_path"))
+    image = absolute_path(record.get("image_path"))
     metadata = _json.dumps(record.get("metadata", {}), ensure_ascii=False)
     lines = ["Choose 1..n of these EXACT lines and run each EXACTLY as",
              "written (copy-paste the whole line).",
