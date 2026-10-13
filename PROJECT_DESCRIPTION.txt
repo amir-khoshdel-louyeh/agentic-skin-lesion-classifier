@@ -1,0 +1,554 @@
+================================================================================
+                    AGENTIC SKIN LESION CLASSIFIER
+              Project Description for Academic Review
+                    Prepared by: Amir Khoshdel Louyeh
+                          Date: October 2026
+             Intended use: University thesis defense support
+================================================================================
+
+--------------------------------------------------------------------------------
+1. EXECUTIVE SUMMARY
+--------------------------------------------------------------------------------
+
+The Agentic Skin Lesion Classifier is a research-stage, multi-agent decision
+support system for dermoscopic skin lesion screening. It combines classical
+deep learning classifiers (CNN and Vision Transformer models) with a
+large-language-model (LLM) orchestration layer that plans tool usage, verifies
+results, and produces an auditable screening report.
+
+The system is explicitly designed as an educational and research prototype.
+It is NOT a medical device and must not be used for clinical diagnosis or
+treatment decisions.
+
+At a high level, the software pipeline itself is implemented, tested, and
+operating as designed: the orchestration chain, receipt verification, safety
+rails, reporting, and audit trail all function correctly. However, the
+individual diagnostic tools are NOT yet fully calibrated, and some models
+still produce classification errors. These limitations are documented,
+measured, and intentionally surfaced by the system rather than hidden.
+In addition, hardware constraints on this machine require the use of external
+AI APIs for parts of the LLM workload, which introduces a privacy risk that
+must be acknowledged and mitigated.
+
+--------------------------------------------------------------------------------
+2. MOTIVATION AND PROBLEM STATEMENT
+--------------------------------------------------------------------------------
+
+Early detection of skin cancer, and of melanoma in particular, significantly
+improves patient outcomes. Dermoscopic image analysis can assist clinicians,
+but:
+
+  (a) Manual dermoscopy interpretation is time-consuming and subject to
+      inter-observer variability.
+  (b) Standalone deep-learning classifiers are often overconfident, poorly
+      calibrated, and unreliable outside their training distribution.
+  (c) A single model's "confidence score" is not a safe basis for a clinical
+      decision, because confidence is not the same as correctness.
+  (d) Deploying large models locally is limited by consumer GPU memory.
+
+This project therefore asks: can an agentic AI system orchestrate multiple
+imperfect diagnostic tools in a way that is safer, more auditable, and more
+honestly uncertain than any single model acting alone?
+
+The thesis contribution is an architecture in which:
+
+  - LLM agents plan and explain, but never invent numerical results;
+  - deterministic code re-executes every claimed tool call and owns the
+    final decision ("single-writer receipts");
+  - an independent, rule-based referee applies one-way escalation rules
+    toward caution (e.g., melanoma suspicion always escalates to referral);
+  - every tool is calibration-gated before it may vote;
+  - every round leaves a machine-readable audit trail.
+
+--------------------------------------------------------------------------------
+3. PROJECT OBJECTIVES
+--------------------------------------------------------------------------------
+
+  O1. Build a multi-role agentic pipeline (Quality, Brain, Diagnostic
+      Thinkers, Critic, Specialists) that decides how to use a pool of
+      skin-lesion classifiers.
+  O2. Prevent LLM hallucination of medical numbers via a single-writer
+      receipt protocol (LLMs report commands; code fills in results).
+  O3. Calibrate each tool on a held-out split (accuracy, ECE, melanoma
+      recall) and drop tools that fail the gate from the voting pool.
+  O4. Produce a two-part, auditable Markdown report: machine-authoritative
+      evidence (Part A) versus LLM explanations with zero vote power (Part B).
+  O5. Enforce research-use-only policies, prompt safety rails, and fail-safe
+      degradation in every role.
+  O6. Provide a CLI, a Tkinter GUI, an offline benchmark harness, and an
+      18-script test suite so results are reproducible and defensible.
+
+--------------------------------------------------------------------------------
+4. PROJECT STRUCTURE AND FILE LAYOUT
+--------------------------------------------------------------------------------
+
+agentic-skin-lesion-classifier/
+|
+|-- README.md                 Main documentation (architecture, quickstart)
+|-- PROJECT_DESCRIPTION.txt   This document
+|-- requirements.txt          Verified Python dependencies
+|-- prompt.yaml               24 demo cases (image + patient metadata)
+|-- tools/manifest.yaml       Single source of truth for all tools (Manifest v2)
+|-- tools/WEIGHTS.md          Model weight provenance (source, license, sha256)
+|
+|-- main.py                   Primary CLI entry point
+|-- orchestrator.py           Round orchestration + receipt verification
+|-- skin_agent.py             OpenClaw LLM session transport (retry/backoff)
+|-- benchmark.py              Held-out evaluation harness
+|-- gui.py                    Tkinter desktop application
+|-- stage_openclaw_media.py   Media staging helper for the agent workspace
+|
+|-- agents/
+|   `-- runner.py             Isolated diagnostic thinker sessions
+|
+|-- control/                  Deterministic "plain code referee" layer (20 modules)
+|   |-- brain.py              Brain supervisor (max 7 sessions, text-only)
+|   |-- calibration.py        Calibration gates + temperature / bias fitting
+|   |-- chat.py               Post-lock grounded Q&A (fenced web advisor)
+|   |-- confidence.py         Entropy and confidence gates
+|   |-- controller.py         Case state, redo/careful modes, Q&A
+|   |-- critic.py             Asymmetric critic (object or stay silent)
+|   |-- decide.py             Final rule-based referee + audit writer
+|   |-- enforcement.py        JSON envelope + Pydantic validation + repair
+|   |-- eval.py               Ground truth, held-out split, scoring
+|   |-- guard.py              Deterministic OpenCV image quality gate
+|   |-- manifest.py           Manifest v2 loader and command rendering
+|   |-- paths.py              Cross-platform path safety checks
+|   |-- prompts.py            Two-layer prompt loader + doctor validation
+|   |-- quality.py            Quality agent role (pass|cleaned|flagged)
+|   |-- schemas.py            Verdict envelope and class definitions
+|   |-- specialists.py        Top-2 specialist advocates and shortlist filter
+|   `-- vram.py               VRAM budget check + Ollama unload policy
+|
+|-- openclaw-skills/          Six role skills (quality, brain, diagnostic,
+|   |                         critic, specialist, chat), one SKILL.md each
+|-- prompts/                  Two-layer prompts:
+|   |                         *  .system.md  = LOCKED safety layer
+|   |                         *  .doctor.md  = physician-editable thresholds
+|
+|-- tools/                    24 CLI diagnostic and support tools
+|   |-- ham10000_cnn.py       SkinCNN (HAM10000)
+|   |-- isic_efficientnet_b4.py / isic_resnet50.py / isic_vit.py
+|   |                         ISIC2019 fine-tuned classifiers
+|   |-- dermai_b0.py          EfficientNet-B0 (benchmark reference)
+|   |-- multimodal_fusion.py  Image + metadata fusion model
+|   |-- ensemble_high.py      Ensemble vote tool
+|   |-- drdiag_vlm.py         Qwen2-VL VLM (excluded from voting pool)
+|   |-- vlm_ollama.py         Ollama VLM (excluded from voting pool)
+|   |-- lesion_segmentation.py  MedSAM segmentation (support only, no vote)
+|   |-- quality_gate.py / preprocess.py / abcde_analyzer.py
+|   |-- calibrate.py / fit_temperature.py / train_isic.py
+|   `-- report_pdf.py / notify.py / runtime.py
+|
+|-- calibration/              Per-tool JSON gate records + SUMMARY.md
+|-- dataset/ISIC2019_full/    25,331 images (git-ignored)
+|-- dataset/ISIC2019_test/    24 tracked demo images
+|-- models/                   Downloaded/trained weights (git-ignored)
+|-- report/                   Runtime artifacts: audit.jsonl, round_*.md
+|-- tests/                    18 self-contained stdlib test scripts
+|-- assets/                   Demo images and GIFs
+|
+Statistics: ~71 Python files, ~11,000+ lines of code (excluding virtualenv).
+
+--------------------------------------------------------------------------------
+5. HOW THE SYSTEM WORKS
+--------------------------------------------------------------------------------
+
+Design principle:
+  "NO hardcoded pipeline. The LLM brain inside each session decides what to
+   do. Code acts as referee (receipts, VRAM, thresholds), never as decider."
+
+5.1 End-to-end round lifecycle
+
+  Input record (image + metadata from prompt.yaml)
+      |
+      v
+  [1] GUARD (plain code)
+      Deterministic blur / exposure / resolution checks. Never decides.
+      |
+      v
+  [2] QUALITY AGENT (LLM)
+      Verdict: pass | cleaned | flagged. May clean the image.
+      Never diagnoses; never stops the round.
+      |
+      v
+  [3] ABCDE analyzer (plain code)
+      Optional structural evidence (asymmetry, border, color, diameter).
+      |
+      v
+  [4] BRAIN LOOP (LLM supervisor + LLM diagnostic thinkers)
+      - Brain session is TEXT-ONLY: it never sees the image and never
+        receives raw numbers; its "steer" instructions are sanitised.
+      - Each diagnostic session freely chooses tools from the gated pool,
+        runs PRE-RENDERED exact command lines (no transcription errors),
+        and returns a structured JSON verdict envelope.
+      - Every claimed command is RE-EXECUTED control-side; the real
+        disease name and confidence come from the tool's own JSON output,
+        never from the LLM's text. (Single-writer receipt protocol.)
+      - Up to 7 sessions; fail-safe stop on invalid JSON.
+      |
+      v
+  [5] CRITIC (LLM, exactly once, after the loop)
+      May only OBJECT with citations, or stay silent.
+      A sustained objection forces "suspicious - refer to physician".
+      |
+      v
+  [6] SPECIALISTS (LLM, at most 2, only if >= 2 distinct classes)
+      Two advocates argue for the top-2 shortlist.
+      Persistent disagreement = "specialist dilemma" = escalate to referral.
+      Off-shortlist classes are ignored (no evidence).
+      |
+      v
+  [7] REFEREE (plain code, NO LLM)
+      Deterministic one-way escalation rules:
+        - any melanoma vote at/above threshold        -> suspicious
+        - borderline flag                             -> suspicious
+        - confidence below floor                     -> suspicious
+        - quality flagged                            -> suspicious
+        - sustained critic objection                 -> suspicious
+        - specialist dilemma                         -> suspicious
+        - otherwise weighted majority vote            -> benign
+        - zero valid evidence                        -> inconclusive
+      |
+      v
+  [8] REPORT + AUDIT
+      - Two-part Markdown report (see Section 7)
+      - Append-only report/audit.jsonl (steers, sessions, timings,
+        thresholds, provenance hashes)
+      - Optional desktop notification and PDF export
+
+5.2 Why this matters for safety
+
+  - LLMs cannot inject fake numbers: predicted_class and confidence are
+    forced to null in the agent prompt and filled only by code after
+    re-execution.
+  - One vote per tool (duplicate receipts are deduplicated).
+  - Only tools present in the calibration-gated diagnostic pool may vote.
+  - Any uncertainty flag or adverse signal escalates toward caution, never
+    toward reassurance.
+
+--------------------------------------------------------------------------------
+6. TECHNOLOGIES AND MODELS
+--------------------------------------------------------------------------------
+
+6.1 Software stack
+  Language            Python (verified on 3.14.8)
+  Deep learning       PyTorch, torchvision, Hugging Face transformers
+  Computer vision     OpenCV (headless), Pillow, NumPy, pandas, scikit-learn
+  Validation          Pydantic v2 (strict schemas), PyYAML
+  LLM runtime         Ollama (local: qwen3:8b as agent brain)
+  Agent transport     OpenClaw CLI (isolated session per call, JSON output)
+  GUI                 Tkinter
+  Tests               18 stdlib scripts (PASS/FAIL, non-zero exit on failure)
+
+6.2 Hardware
+  GPU                 NVIDIA RTX 5070 Laptop, 8 GB VRAM, CUDA 13.4
+  Policy              Sequential GPU scheduling, OLLAMA_KEEP_ALIVE=0,
+                      pre-load VRAM budget checks, unload_ollama between
+                      incompatible tools.
+
+6.3 Diagnostic model pool (see tools/WEIGHTS.md for full provenance)
+  ham10000-cnn        SkinCNN, fine-tuned on HAM10000
+  isic-efficientnet-b4 / isic-resnet50 / isic-vit
+                      EfficientNet-B4, ResNet-50, ViT-B/16 fine-tuned
+                      locally on ISIC2019 (7 classes; SCC excluded)
+  dermai-b0           EfficientNet-B0 (reference / benchmark)
+  multimodal-fusion   Cross-attention fusion of image + metadata
+  ensemble-high       CNN + multimodal ensemble
+  drdiag-vlm          Qwen2-VL (VLM; EXCLUDED from the voting pool)
+  vlm-ollama          qwen3-vl via Ollama (EXCLUDED from the voting pool)
+  lesion-segmentation MedSAM (mask only; never casts a diagnostic vote)
+
+  Licensing: weights are documented per model (CC BY-NC 4.0 for the derm-cnn
+  weights, Apache-2.0 for several others). Non-commercial research use only.
+
+--------------------------------------------------------------------------------
+7. OUTPUT FORMAT AND REPORTING POLICY
+--------------------------------------------------------------------------------
+
+Each round produces a Markdown report with two strictly separated parts:
+
+  Part A (machine-authoritative)
+    - Image provenance (SHA-256), backend, timestamp
+    - Verified tool receipts and their raw outputs
+    - The referee's decision and the rule that fired
+    - Calibration status of every tool that voted
+
+  Part B (LLM narrative)
+    - Plain-language explanation for the reader
+    - ZERO vote power: deleting Part B must not change the decision
+      (enforced by tests/test_two_part.py)
+
+  Mandatory footer on every report:
+    "Research use only - not a medical diagnosis."
+
+  Coverage note (always printed):
+    - 7 HAM10000/ISIC classes only; SCC and other conditions are out of
+      coverage; flat uncertain cases are referred, never forced into a
+      near class.
+
+--------------------------------------------------------------------------------
+8. CALIBRATION STATUS (CURRENT, HONEST LIMITATION)
+--------------------------------------------------------------------------------
+
+The system includes a rigorous offline calibration harness, but the tools
+are NOT yet fully calibrated. This is an active area of work and a known
+source of residual error.
+
+8.1 What the harness measures (control/calibration.py)
+  Gate thresholds currently enforced before a tool may join the pool:
+    - Minimum accuracy            >= 0.60
+    - Maximum Expected Calibration Error (ECE) <= 0.10
+    - Minimum melanoma recall     >= 0.90   (recently raised; stricter)
+    - Minimum sample size         >= 150 held-out cases
+
+  Techniques applied:
+    - Temperature scaling (NLL grid search) to reduce overconfidence
+    - Melanoma logit-bias fitting to push sensitivity toward caution
+    - Per-class recall / precision, 7x7 confusion matrix, reliability
+      bins, NLL, Brier score
+
+8.2 Current results (see calibration/SUMMARY.md)
+  PASS (eligible to vote, with caveats):
+    ham10000-cnn, isic-vit
+    (and, under the earlier 0.70 melanoma-recall bar, also
+     isic-efficientnet-b4, isic-resnet50)
+
+  FAIL (blocked from the voting pool):
+    dermai-b0, skin-lesion-mid, skin-lesion-high, multimodal-fusion,
+    ensemble-high
+
+  Effect: with the latest stricter gate (melanoma recall >= 0.90), several
+  tools are currently blocked. The agent-visible pool is therefore small,
+  and overall screening accuracy is correspondingly limited.
+
+8.3 Implications to state clearly in the defense
+  - The SOFTWARE is stable and functionally correct (see Section 10).
+  - The MODELS are research-grade and imperfect: accuracy in the mid-60s%
+    to low-70s% on held-out data, with residual calibration error.
+  - Errors are EXPECTED and MEASURED. The system's job is to detect and
+    escalate uncertainty, not to pretend certainty.
+  - Improving calibration and adding more validated models is future work,
+    not a hidden defect.
+
+--------------------------------------------------------------------------------
+9. HARDWARE CONSTRAINTS AND EXTERNAL AI API USE (PRIVACY RISK)
+--------------------------------------------------------------------------------
+
+9.1 Constraint
+  The development machine has only 8 GB of VRAM. Running multiple large
+  CNN/ViT tools plus an 8B LLM simultaneously exceeds this budget. The
+  system mitigates this with sequential GPU scheduling and aggressive
+  unloading, but throughput and model size remain constrained.
+
+9.2 Current practice
+  To keep the agentic layer responsive under these limits, parts of the
+  LLM workload (agent reasoning / orchestration) may be routed through
+  EXTERNAL AI APIs (e.g., Groq or similar hosted inference providers)
+  instead of fully local Ollama inference.
+
+9.3 Privacy and data-exposure risk (must be disclosed)
+  Sending prompts or case context to a third-party API can expose
+  protected health information (PHI) and dermoscopic case data to an
+  external processor. Relevant risks include:
+    - Transmission of patient metadata (age, sex, localization) and
+      possibly derived image descriptions to third-party servers.
+    - Provider-side logging, retention, or human review of requests.
+    - Jurisdictional and compliance issues (HIPAA/GDPR/ institutional
+      IRB) if real patient data is ever used.
+
+9.4 Current mitigations
+    - Dataset and model weights are git-ignored; the .env API key is
+      git-ignored and never committed.
+    - The demo set uses public research datasets (ISIC2019, HAM10000),
+      not real patient records.
+    - Receipt verification means the LLM never authors the medical
+      numbers; only command names and identifiers would leave the machine
+      in the worst case.
+    - Reports are written locally under report/.
+
+9.5 Residual risk (to be stated honestly)
+    This is still a REAL RISK, not a solved problem. For any future use
+    with real clinical data, the system must either (a) run the LLM fully
+    locally, (b) use a BAA-covered / on-premise provider, or (c) strip all
+    PHI before any external call. The current configuration is acceptable
+    ONLY for public-dataset, research-only demonstrations.
+
+--------------------------------------------------------------------------------
+10. POLICIES, SAFETY RAILS, AND GOVERNANCE
+--------------------------------------------------------------------------------
+
+10.1 Medical / research policy
+  - Research use only; not a medical device; not for clinical diagnosis
+    or treatment.
+  - This disclaimer is rendered by code into every report and benchmark
+    output; models are forbidden from adding or removing it themselves.
+  - Locked system prompts cannot be edited to remove mandatory safety
+    phrases (loading fails fast if a sentinel is missing).
+
+10.2 Prompt and threshold policy (two-layer prompts)
+  - Layer 1 (*.system.md): LOCKED. Contains safety invariants such as
+    "never fabricate tool output", "forces suspicious - refer",
+    "Research use only", "never diagnoses", "never sees images" (Brain).
+  - Layer 2 (*.doctor.md): physician-editable thresholds only:
+        borderline_threshold, confidence_threshold, entropy_threshold
+    Valid range [0.60, 0.90]; changes allowed ONLY toward caution.
+  - Edits containing jailbreak / override language are rejected
+    ("ignore previous instructions", "confident benign", "skip receipts",
+    "never refer", etc.).
+  - Invalid doctor files cause a fail-fast error, never silent drift.
+  - Runtime code must read thresholds via effective_thresholds();
+    hardcoded constants are forbidden.
+
+10.3 Role isolation policy
+  - Quality agent: may clean or flag; never diagnoses; never stops.
+  - Brain: text-only; never sees images; steer is sanitised of numbers.
+  - Diagnostic thinkers: free tool choice inside the gated pool only.
+  - Critic: may object or stay silent; cannot overturn by fiat (only
+    a sustained objection forces escalation).
+  - Specialists: confined to the top-2 shortlist.
+  - Referee: pure deterministic code; NO LLM is allowed in the decision.
+
+10.4 Fail-safe degradation policy
+  - Bad doctor file        -> Quality flagged, Brain stopped (no crash)
+  - Unparseable critic     -> treated as silence
+  - Unparseable quality    -> fail-safe "flagged"
+  - Double-invalid envelope-> "ran=False" / no evidence
+  - Tool crash             -> no-evidence result, round continues
+  - Transient LLM errors   -> up to 5 retries with exponential backoff
+    (fresh isolated session each attempt)
+  - Batch mode             -> one failed record is logged; sweep continues
+
+10.5 Data governance
+  - Full append-only audit trail: report/audit.jsonl
+  - Image SHA-256 provenance recorded in Part A of each report
+  - Model weight provenance (URL, license, sha256) in tools/WEIGHTS.md
+  - Datasets and weights never committed to git
+  - API keys live only in .env (git-ignored)
+
+10.6 Web access policy (post-lock Q&A)
+  - Grounded Q&A may consult web sources ONLY as a fenced advisor:
+    sources must be cited, and web content can NEVER change a recorded
+    decision (control/chat.py WEB_RULES).
+
+--------------------------------------------------------------------------------
+11. TESTING AND VERIFICATION
+--------------------------------------------------------------------------------
+
+The repository contains 18 self-contained test scripts (~2,700 lines) that
+print PASS/FAIL and exit non-zero on any failure:
+
+  test_chain              Round order, critic-once rule, autonomy
+  test_two_part           Deleting Part B must not change the decision
+  test_routing            Legacy prompt-only routing stays retired
+  test_quality            Quality role contract
+  test_brain              Brain supervision limits and sanitisation
+  test_diagnostic         Diagnostic session contract
+  test_critic             Critic object-or-silence behavior
+  test_specialists        Specialist shortlist confinement
+  test_single_writer      Agent cannot author numbers
+  test_receipt            Receipt re-execution (requires model weights)
+  test_safety             VRAM checks and doctor-threshold bounds
+  test_skills             Six skills in sync with the manifest
+  test_contract           Manifest / skill drift detection
+  test_grounding          Post-lock narration only
+  test_eval               Held-out split and benchmark entry
+  test_session_reliability  Exact-line execution and repair retry
+  test_hardening          Regression fixes from end-to-end runs
+  test_docs_gui           Documentation and GUI consistency
+
+Run all tests:
+  for t in tests/test_*.py; do .venv/bin/python "$t"; done
+
+Additional verification tools:
+  python benchmark.py --split heldout           # offline scoring
+  python -m control.prompts --doctor-check      # validate prompt edits
+  python main.py --no-interactive               # batch over 24 demo cases
+
+Known remaining engineering issues (tracked in freebuff.tmp, 14 findings):
+  some documentation pointers are stale; a few minor dead arguments and
+  hardcoded model-name constants remain; there is no CI pipeline yet;
+  the README claims MIT but a LICENSE file has not been added. These are
+  housekeeping items, not functional defects in the screening pipeline.
+
+--------------------------------------------------------------------------------
+12. CURRENT STATUS SUMMARY (FOR THE DEFENSE)
+--------------------------------------------------------------------------------
+
+  What works well today
+    [x] Full agentic pipeline runs end-to-end on the 24 demo cases
+    [x] Single-writer receipt verification blocks fabricated numbers
+    [x] Rule-based referee applies one-way escalation correctly
+    [x] Two-part reports + JSONL audit trail are produced and consistent
+    [x] Prompt safety rails, doctor-threshold validation, fail-safe paths
+    [x] Calibration harness runs and gates the tool pool automatically
+    [x] CLI, GUI, benchmark, and 18-script test suite are available
+    [x] No known open crash-level bugs in the main chain
+
+  What is NOT yet complete
+    [ ] Tools are not fully calibrated; several fail the current gates
+        and are excluded from voting
+    [ ] Residual classification errors remain (expected at this stage)
+    [ ] Small eligible tool pool limits overall accuracy
+    [ ] 8 GB VRAM limits local LLM size and parallelism
+    [ ] External AI API use creates a documented data-exposure risk
+    [ ] No CI/CD, no LICENSE file, some stale documentation pointers
+
+  Overall claim
+    The PROJECT SOFTWARE is complete, tested, and operating without known
+    bugs in its intended research configuration. The DIAGNOSTIC MODELS are
+    research-grade, partially calibrated, and still produce errors; the
+    architecture is designed to measure, gate, and escalate that
+    uncertainty rather than conceal it. External API usage is a conscious,
+    disclosed trade-off forced by hardware limits and is acceptable only
+    for public-dataset research demonstrations - not for real patient data.
+
+--------------------------------------------------------------------------------
+13. FUTURE WORK
+--------------------------------------------------------------------------------
+
+  F1. Complete calibration of all remaining tools to pass the strict
+      melanoma-recall gate; expand the eligible voting pool.
+  F2. Add Grad-CAM / attention explainability overlays to reports.
+  F3. Optionally serve the pipeline behind FastAPI with authentication.
+  F4. Integrate a CI workflow running the 18 test scripts on each push.
+  F5. Evaluate fully local LLM inference (quantized) to eliminate the
+      external API privacy risk for real clinical data.
+  F6. Add a LICENSE file (MIT, with CC BY-NC weight caveats) and refresh
+      stale documentation pointers.
+  F7. Prospective evaluation on an independent clinical cohort under IRB
+      approval, if the project ever moves beyond public datasets.
+
+--------------------------------------------------------------------------------
+14. CONCLUSION
+--------------------------------------------------------------------------------
+
+This thesis project demonstrates that an agentic AI architecture can make
+imperfect medical image classifiers safer to combine than to trust
+individually. By forcing LLMs to propose commands instead of numbers,
+re-executing every claim in deterministic code, calibrating and gating each
+tool, and escalating every suspicious signal toward referral, the system
+converts a collection of error-prone models into an auditable, cautious,
+research-only screening workflow.
+
+The implementation is complete and functioning as designed. Calibration of
+the underlying models remains ongoing, and the use of external AI APIs
+under an 8 GB GPU constraint carries a real - and explicitly disclosed -
+privacy risk. Both points are treated as first-class limitations of this
+research, not as hidden defects, and both are addressed in the future work
+plan above.
+
+--------------------------------------------------------------------------------
+DISCLAIMER
+--------------------------------------------------------------------------------
+
+This project is intended for educational and research purposes only.
+It is NOT a medical device and MUST NOT be used for clinical diagnosis or
+treatment decisions. Model weights may be subject to non-commercial
+licenses (see tools/WEIGHTS.md). Any use of external AI APIs must comply
+with applicable data-protection regulations and institutional policies.
+
+--------------------------------------------------------------------------------
+Author: Amir Khoshdel Louyeh
+Repository: github.com/amir-khoshdel-louyeh/agentic-skin-lesion-classifier
+================================================================================
