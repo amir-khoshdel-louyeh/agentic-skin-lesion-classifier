@@ -9,7 +9,7 @@ Gate: a tool enters the production pool only if
   * it produced predictions on the full split,
   * accuracy >= MIN_ACCURACY (0.60),
   * ECE <= MAX_ECE (0.10), and
-  * melanoma recall >= MIN_MELANOMA_RECALL (0.70).
+  * melanoma recall >= MIN_MELANOMA_RECALL (0.90).
 The melanoma bar is separate from aggregate accuracy: a model can look
 accurate while almost never flagging melanoma (the initial B4/ResNet
 fits sat at 0.52-0.56). Failures are written with passed=false and
@@ -18,6 +18,8 @@ control.brain.diagnostic_pool drops them.
 Temperature scaling (`--fit-temperature`) runs the same tools at T=1.0
 on a disjoint calibration split, fits T by NLL grid search, and writes
 `--temperature-out` (models/<name>/calibration.json for the new models).
+For the locally trained ISIC models use tools/fit_temperature.py instead:
+it fits the melanoma decision bias for sensitivity first, then T.
 No API calls and no agent sessions: tools only.
 
 Usage:

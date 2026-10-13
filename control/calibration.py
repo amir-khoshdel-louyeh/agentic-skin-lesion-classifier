@@ -20,7 +20,10 @@ MIN_ACCURACY = 0.60
 MAX_ECE = 0.10
 # A tool that rarely predicts melanoma is unsafe for screening even when
 # its aggregate accuracy looks fine (the B4/ResNet fits sat at 0.52-0.56).
-MIN_MELANOMA_RECALL = 0.70
+# 0.90 is the screening floor: missing 1 in 10 melanomas is the most the
+# pool may tolerate, and retraining is judged against it.
+MIN_MELANOMA_RECALL = 0.90
+TARGET_MELANOMA_RECALL = 0.90
 
 
 def load_registry(root: Path = ROOT_DIR) -> dict[str, dict]:
@@ -85,8 +88,8 @@ def fit_temperature(probs_by_stem: dict[str, dict],
 
 def fit_sensitive_calibration(probs_by_stem: dict[str, dict],
                               truth: dict[str, str],
-                              target_recall: float = 0.75,
-                              max_bias: float = 3.0,
+                              target_recall: float = TARGET_MELANOMA_RECALL,
+                              max_bias: float = 5.0,
                               step: float = 0.05) -> dict:
     """Fit a melanoma logit bias for sensitivity, then temperature.
 

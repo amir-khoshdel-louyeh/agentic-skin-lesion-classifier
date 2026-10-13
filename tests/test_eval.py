@@ -125,10 +125,10 @@ check("benchmark-broken-tool-skipped",
 from tools.calibrate import gate  # noqa: E402
 
 base = {"n": 175, "accuracy": 0.70, "ece": 0.05,
-        "per_class": {"Melanoma": {"recall": 0.75}}}
+        "per_class": {"Melanoma": {"recall": 0.92}}}
 check("gate-accepts-calibrated-and-sensitive",
       gate(base)["passed"] is True, str(gate(base)))
-blind = {**base, "per_class": {"Melanoma": {"recall": 0.50}}}
+blind = {**base, "per_class": {"Melanoma": {"recall": 0.80}}}
 check("gate-rejects-low-melanoma-recall",
       gate(blind)["passed"] is False
       and any("melanoma_recall" in reason

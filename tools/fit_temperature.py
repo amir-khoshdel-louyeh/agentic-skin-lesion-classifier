@@ -20,7 +20,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from control.calibration import fit_sensitive_calibration  # noqa: E402
+from control.calibration import (  # noqa: E402
+    TARGET_MELANOMA_RECALL,
+    fit_sensitive_calibration,
+)
 from control.eval import image_path_for_stem, split_for_training  # noqa: E402
 from tools.isic_common import probabilities  # noqa: E402
 
@@ -30,7 +33,8 @@ def main() -> int:
         description="Fit temperature scaling on the calibration split.")
     parser.add_argument("--model-dir", required=True)
     parser.add_argument("--per-class", type=int, default=30)
-    parser.add_argument("--target-melanoma-recall", type=float, default=0.75)
+    parser.add_argument("--target-melanoma-recall", type=float,
+                        default=TARGET_MELANOMA_RECALL)
     parser.add_argument("--out", default="")
     args = parser.parse_args()
 
