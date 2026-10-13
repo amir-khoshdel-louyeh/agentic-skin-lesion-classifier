@@ -83,14 +83,12 @@ def parse_objection(raw: str, verdict_count: int,
     """
     import re as _re
 
-    match = _re.search(r"\{.*\}", raw.strip(), _re.DOTALL)
-    if not match:
+    from control.jsontext import first_json_object
+
+    payload = first_json_object(raw)
+    if payload is None:
         return False, ["no JSON object"]
-    try:
-        payload = json.loads(match.group(0))
-    except (ValueError, TypeError):
-        return False, ["malformed JSON"]
-    if not isinstance(payload, dict) or payload.get("objection") is not True:
+    if payload.get("objection") is not True:
         return False, ["no objection raised"]
     reasons = payload.get("reasons")
     cites = payload.get("cites")

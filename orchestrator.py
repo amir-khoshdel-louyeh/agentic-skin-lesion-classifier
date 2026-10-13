@@ -27,11 +27,13 @@ from control.guard import run_guard
 from control.brain import (MAX_SESSIONS, diagnostic_pool, receipt_summary,
                        run_brain_step, run_specialist_briefs,
                        session_tools)
-from control.manifest import load_manifest, render_subset_for_case
+from control.manifest import (cleaned_output_path, load_manifest,
+                              render_subset_for_case)
 from control.paths import resolve, startup_path_check
 from control.prompts import effective_thresholds
-from control.quality import (QUALITY_TOOLKIT, quality_line,
-                             resolve_cleaned_image, run_quality)
+from control.quality import (QUALITY_TOOLKIT, gate_cite, quality_binds,
+                             quality_line, resolve_cleaned_image,
+                             run_quality)
 from control.router import run_abcde
 from control.schemas import VerdictEnvelope
 
@@ -360,10 +362,28 @@ def run_round(
     # the path exists, downstream sessions run on the cleaned copy;
     # otherwise they keep the original. verify_receipt re-executes against
     # the SAME active image, so single-writer numbers stay consistent.
-    cleaned_image = resolve_cleaned_image(record, quality)
+    # The cleaned path is validated against the path this round actually
+    # offered (`cleaned_output_path`): a model-authored path is not
+    # evidence and could point the round at any file on the machine.
+    expected_clean = cleaned_output_path(record)
+    cleaned_image = resolve_cleaned_image(record, quality,
+                                          expected=expected_clean)
+    if quality.get("verdict") == "cleaned" and cleaned_image is None:
+        quality["cleaned_rejected"] = (
+            "cleaned_image is not the offered output path or is missing: "
+            f"{expected_clean}")
     active_record = dict(record)
+    active_gate = guard
     if cleaned_image is not None:
         active_record["image_path"] = str(cleaned_image)
+        # Re-gate the file the receipts will actually be executed against:
+        # preprocess can leave a blurry original blurry, and the decision
+        # must bind to the image in use, not to the original.
+        active_gate = run_guard(str(cleaned_image))
+        quality["control_cites"] = [
+            *quality.get("control_cites", []),
+            gate_cite(active_gate, label="active"),
+        ]
     preprocess_info = ({"cleaned_image": str(cleaned_image)}
                        if cleaned_image is not None else None)
     # Pre-rendered EXACT lines for the ACTIVE image (real path + metadata
@@ -518,7 +538,7 @@ def run_round(
     decision = decide(verdicts, borderline_threshold=borderline_threshold,
                       confidence_threshold=thresholds["confidence_threshold"],
                       critic_objection=critic_sustained,
-                      quality_flagged=(quality.get("verdict") == "flagged"))
+                      quality_flagged=quality_binds(quality, active_gate))
     # Persistent specialist disagreement is named, never averaged away:
     # two confident advocates for different diseases must refer.
     spec_classes = sorted({

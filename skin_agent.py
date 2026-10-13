@@ -56,11 +56,22 @@ def is_transient_openclaw_error(output: str) -> bool:
             "session file changed while embedded prompt lock was released",
             "auto-compaction",
             "willretry=false",
-            "threshold",
             "incomplete turn detected",
             "failovererror",
             "candidate_failed",
             "incomplete terminal response",
+            # Rate limiting, but matched specifically: a bare "429" or
+            # "threshold" used to retry ANY error mentioning those digits
+            # or that word, five times with backoff, on a permanent fault.
+            "http 429",
+            "status 429",
+            "error 429",
+            "429 too many",
+            "429 rate limit",
+            "rate_limit_exceeded",
+            "too_many_requests",
+            "resource_exhausted",
+            "rate limit",
         ]
     )
 
@@ -71,10 +82,12 @@ def run_openclaw_cli(
     openclaw_cmd = find_openclaw_executable()
     clean_prompt = " ".join(prompt.strip().split())
 
-    current_session_id = f"session-{uuid.uuid4().hex}"
-
-    max_retries = 2
+    max_retries = 5
     for attempt in range(max_retries + 1):
+        # A fresh session per attempt is the whole point of the retry: the
+        # errors it targets are session-state errors, so reusing one id
+        # would reproduce the failure it is meant to escape.
+        current_session_id = f"session-{uuid.uuid4().hex}"
         command = [
             openclaw_cmd,
             "agent",
@@ -121,12 +134,13 @@ def run_openclaw_cli(
             combined = f"{stderr_text}\n{stdout_text}".strip()
 
             if attempt < max_retries and is_transient_openclaw_error(combined):
+                delay = min(2 ** (attempt + 1), 120)
                 print(
                     f"Transient OpenClaw error detected on attempt "
                     f"{attempt + 1}: {combined}. "
-                    "Retrying with a fresh session..."
+                    f"Retrying in {delay}s with a fresh session..."
                 )
-                time.sleep(2)
+                time.sleep(delay)
                 continue
 
             raise RuntimeError(

@@ -244,7 +244,9 @@ def build_report(
         ]
         control_cites = quality.get("control_cites") or []
         if control_cites:
-            lines.append(f"- Gate (control): {'; '.join(control_cites[:2])}")
+            lines.append(f"- Gate (control): {'; '.join(control_cites[:3])}")
+        if quality.get("cleaned_rejected"):
+            lines.append(f"- Cleaned rejected: {quality['cleaned_rejected']}")
     else:
         lines += ["", "- Quality: not recorded this round."]
     lines += [

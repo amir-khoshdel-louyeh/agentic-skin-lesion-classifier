@@ -105,9 +105,12 @@ def transforms_for(size: int):
 
 
 @torch.no_grad()
-def evaluate(model, loader, device) -> tuple[float, float]:
+def evaluate(model, loader, device) -> tuple[float, float, float]:
+    """Return (accuracy, melanoma recall, loss)."""
     model.eval()
     hits = total = 0
+    mel_idx = CLASS_TO_IDX["Melanoma"]
+    mel_hits = mel_total = 0
     loss_sum = 0.0
     criterion = nn.CrossEntropyLoss()
     for images, labels in loader:
@@ -116,20 +119,34 @@ def evaluate(model, loader, device) -> tuple[float, float]:
                             enabled=device.type == "cuda"):
             logits = model(images)
         loss_sum += float(criterion(logits.float(), labels)) * labels.size(0)
-        hits += int((logits.argmax(1) == labels).sum())
+        pred = logits.argmax(1)
+        hits += int((pred == labels).sum())
+        mel_mask = labels == mel_idx
+        mel_total += int(mel_mask.sum())
+        mel_hits += int((pred[mel_mask] == mel_idx).sum())
         total += labels.size(0)
-    return hits / max(total, 1), loss_sum / max(total, 1)
+    return (hits / max(total, 1),
+            mel_hits / max(mel_total, 1),
+            loss_sum / max(total, 1))
 
 
-def class_weights(cases: list[tuple[str, str]]) -> torch.Tensor:
-    """Inverse-sqrt frequency weights: lift DF/VASC without drowning NV."""
+def class_weights(cases: list[tuple[str, str]],
+                  melanoma_weight: float = 1.0) -> torch.Tensor:
+    """Inverse-sqrt frequency weights, times an explicit melanoma boost.
+
+    The boost changes what the model optimizes; it does not replace the
+    calibrated decision bias. Retraining for separation reduces how much
+    bias is needed to reach the recall target.
+    """
     counts = [0] * len(CLASSES)
     for _, label in cases:
         counts[CLASS_TO_IDX[label]] += 1
     total = sum(counts)
     weights = [math.sqrt(total / (len(CLASSES) * max(c, 1))) for c in counts]
     mean = sum(weights) / len(weights)
-    return torch.tensor([w / mean for w in weights], dtype=torch.float32)
+    weights = [w / mean for w in weights]
+    weights[CLASS_TO_IDX["Melanoma"]] *= melanoma_weight
+    return torch.tensor(weights, dtype=torch.float32)
 
 
 def main() -> int:
@@ -140,6 +157,11 @@ def main() -> int:
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--workers", type=int, default=8)
+    parser.add_argument("--melanoma-weight", type=float, default=1.0,
+                        help="Extra loss weight on Melanoma (default 1.0).")
+    parser.add_argument("--select", choices=("accuracy", "sensitivity"),
+                        default="sensitivity",
+                        help="Checkpoint score: 0.5*acc + 0.5*melanoma recall.")
     parser.add_argument("--out", default="")
     args = parser.parse_args()
 
@@ -169,7 +191,8 @@ def main() -> int:
     device = torch.device("cuda")
     model = build_model(args.arch).to(device)
     criterion = nn.CrossEntropyLoss(
-        weight=class_weights(train_cases).to(device), label_smoothing=0.05)
+        weight=class_weights(train_cases, args.melanoma_weight).to(device),
+        label_smoothing=0.05)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr,
                                   weight_decay=0.05)
     steps_per_epoch = len(train_loader)
@@ -177,7 +200,9 @@ def main() -> int:
         optimizer, max_lr=args.lr, epochs=args.epochs,
         steps_per_epoch=steps_per_epoch, pct_start=0.15)
 
-    best_acc = -1.0
+    best_score = -1.0
+    best_acc = 0.0
+    best_mel = 0.0
     history = []
     for epoch in range(1, args.epochs + 1):
         model.train()
@@ -200,17 +225,22 @@ def main() -> int:
             if step % 50 == 0:
                 print(f"  epoch {epoch} step {step}/{steps_per_epoch} "
                       f"loss={running / seen:.4f}", flush=True)
-        val_acc, val_loss = evaluate(model, val_loader, device)
+        val_acc, val_mel, val_loss = evaluate(model, val_loader, device)
         elapsed = time.time() - started
+        score = (0.5 * val_acc + 0.5 * val_mel
+                 if args.select == "sensitivity" else val_acc)
         history.append({"epoch": epoch, "train_loss": round(running / seen, 4),
                         "val_loss": round(val_loss, 4),
                         "val_accuracy": round(val_acc, 4),
+                        "val_melanoma_recall": round(val_mel, 4),
+                        "select_score": round(score, 4),
                         "seconds": round(elapsed, 1)})
         print(f"epoch {epoch}: train_loss={running / seen:.4f} "
               f"val_loss={val_loss:.4f} val_acc={val_acc:.4f} "
+              f"val_mel={val_mel:.4f} score={score:.4f} "
               f"({elapsed / 60:.1f} min)", flush=True)
-        if val_acc > best_acc:
-            best_acc = val_acc
+        if score > best_score:
+            best_score, best_acc, best_mel = score, val_acc, val_mel
             torch.save({"model": model.state_dict(), "arch": args.arch,
                         "classes": CLASSES, "size": args.size},
                        out_dir / "best.pt")
@@ -224,11 +254,16 @@ def main() -> int:
         "calibration_n": len(cal_cases),
         "val_n": len(val_cases),
         "heldout_n": len(heldout),
+        "melanoma_weight": args.melanoma_weight,
+        "select": args.select,
         "best_val_accuracy": round(best_acc, 4),
+        "best_val_melanoma_recall": round(best_mel, 4),
+        "best_select_score": round(best_score, 4),
         "history": history,
     }
     (out_dir / "meta.json").write_text(json.dumps(meta, indent=2))
-    print(f"Wrote {out_dir / 'best.pt'} (val_acc={best_acc:.4f})")
+    print(f"Wrote {out_dir / 'best.pt'} (val_acc={best_acc:.4f}, "
+          f"val_mel={best_mel:.4f}, score={best_score:.4f})")
     return 0
 
 
