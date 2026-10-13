@@ -33,7 +33,13 @@ from control.brain import (  # noqa: E402
 from control.critic import build_critic_prompt  # noqa: E402
 from control.decide import build_report, decide, PART_B_HEADER  # noqa: E402
 from control.manifest import load_manifest, render_subset_for_case  # noqa: E402
-from control.quality import parse_quality  # noqa: E402
+from control.jsontext import first_json_object  # noqa: E402
+from control.quality import (  # noqa: E402
+    gate_cite,
+    parse_quality,
+    quality_binds,
+    resolve_cleaned_image,
+)
 from control.schemas import VerdictEnvelope  # noqa: E402
 from control.specialists import shortlist  # noqa: E402
 from orchestrator import verify_receipt, verify_receipts  # noqa: E402
@@ -271,6 +277,121 @@ rows = verify_receipts(claimed_two, record_real, manifest)
 check("receipts-one-row-per-tool",
       len(rows) == 2 and {row.command.split()[1] for row in rows} == {
           "tools/ham10000_cnn.py", "tools/isic_vit.py"}, str(rows))
+
+# 7. JSON extraction stops at the first complete object (a reply with a
+# second object or trailing prose used to lose the whole verdict).
+two_objects = ('{"a": 1}\n{"b": 2}')
+check("json-first-object", first_json_object(two_objects) == {"a": 1},
+      str(first_json_object(two_objects)))
+braced_prose = 'note {not json here} then {"verdict": "pass"}'
+check("json-skips-invalid-braces",
+      first_json_object(braced_prose) == {"verdict": "pass"},
+      str(first_json_object(braced_prose)))
+check("json-none-when-absent", first_json_object("no braces at all") is None)
+check("json-none-when-truncated", first_json_object('{"ran": true') is None)
+
+envelope_twice = (
+    '{"ran": true, "command": "python tools/ham10000_cnn.py --image i.jpg",'
+    ' "exit_code": 0, "predicted_class": null, "confidence": null,'
+    ' "reasoning": "r", "uncertainty_flags": []}\n{"ran": false}')
+from control.enforcement import parse_envelope  # noqa: E402
+
+check("envelope-survives-second-object",
+      parse_envelope(envelope_twice).ran is True)
+quality_twice = json.dumps({
+    "verdict": "flagged", "reasons": ["blur"],
+    "cites": ["quality_gate: x"], "cleaned_image": None,
+}) + '\n{"unexpected": true}'
+check("quality-survives-second-object",
+      parse_quality(quality_twice)["verdict"] == "flagged")
+brain_twice = json.dumps({
+    "steer": "verify", "suggested_subset": [], "stop": False,
+    "why": "x",
+}) + '\n{"unexpected": true}'
+check("brain-survives-second-object",
+      parse_brain_order(brain_twice, [])["stop"] is False)
+
+# 8. The round binds on the gate of the ACTIVE image, not on the label:
+# a `cleaned` verdict over a still-failing gate must still bind.
+check("quality-binds-cleaned-gate-failed",
+      quality_binds({"verdict": "cleaned"}, {"passed": False}) is True)
+check("quality-binds-cleaned-gate-ok",
+      quality_binds({"verdict": "cleaned"}, {"passed": True}) is False)
+check("quality-binds-agent-flag",
+      quality_binds({"verdict": "flagged"}, {"passed": True}) is True)
+check("quality-pass-gate-ok-is-free",
+      quality_binds({"verdict": "pass"}, {"passed": True}) is False)
+
+# 9. A model-authored cleaned path is not evidence: only the offered
+# output path may become the active image.
+import tempfile  # noqa: E402
+
+with tempfile.TemporaryDirectory() as tmp:
+    offered = Path(tmp) / "offered_cleaned.jpg"
+    other = Path(tmp) / "other_case.jpg"
+    offered.write_bytes(b"offered")
+    other.write_bytes(b"other")
+    cleaned = {"verdict": "cleaned", "cleaned_image": str(other)}
+    check("cleaned-path-must-match-offered",
+          resolve_cleaned_image({}, cleaned, expected=str(offered)) is None)
+    cleaned_ok = {"verdict": "cleaned", "cleaned_image": str(offered)}
+    check("cleaned-path-accepted",
+          resolve_cleaned_image({}, cleaned_ok,
+                                expected=str(offered)) == offered)
+    check("cleaned-missing-file-rejected",
+          resolve_cleaned_image(
+              {}, {"verdict": "cleaned",
+                   "cleaned_image": str(Path(tmp) / "nope.jpg")},
+              expected=str(Path(tmp) / "nope.jpg")) is None)
+check("gate-cite-labels-active",
+      gate_cite({"passed": False}, label="active")
+      .startswith("quality_gate@active:"))
+
+# 10. OpenClaw retries: narrow transient matching + a fresh session id
+# per attempt (the retry targets session-state errors).
+import skin_agent  # noqa: E402
+from skin_agent import is_transient_openclaw_error  # noqa: E402
+
+check("retry-not-on-generic-threshold",
+      is_transient_openclaw_error("confidence threshold not met") is False)
+check("retry-not-on-bare-429",
+      is_transient_openclaw_error("counter mismatch 1429") is False)
+check("retry-on-http-429",
+      is_transient_openclaw_error("HTTP 429 Too Many Requests") is True)
+
+calls = []
+
+
+class _Fail:
+    returncode = 1
+    stdout = ""
+    stderr = "HTTP 429 Too Many Requests"
+
+
+def _fake_run(cmd, **kwargs):
+    calls.append(list(cmd))
+    return _Fail()
+
+
+_real_run = skin_agent.subprocess.run
+_real_sleep = skin_agent.time.sleep
+_real_which = skin_agent.find_openclaw_executable
+skin_agent.subprocess.run = _fake_run
+skin_agent.time.sleep = lambda _s: None
+skin_agent.find_openclaw_executable = lambda: "openclaw"
+try:
+    try:
+        skin_agent.run_openclaw_cli("hi", show_command=False)
+    except RuntimeError:
+        pass
+finally:
+    skin_agent.subprocess.run = _real_run
+    skin_agent.time.sleep = _real_sleep
+    skin_agent.find_openclaw_executable = _real_which
+session_ids = [cmd[cmd.index("--session-id") + 1] for cmd in calls]
+check("retry-fresh-session-each-attempt",
+      len(session_ids) == 6 and len(set(session_ids)) == 6,
+      str(session_ids))
 
 print(f"{len(failures)} failures")
 raise SystemExit(1 if failures else 0)

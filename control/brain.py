@@ -17,6 +17,8 @@ from __future__ import annotations
 import json
 import re as _re
 
+from control.jsontext import first_json_object
+
 MAX_SESSIONS = 7
 
 # VLM tools stay OUT of the diagnostic pool until they re-pass the 0.6
@@ -145,15 +147,9 @@ def parse_brain_order(raw: str, pool_names: list[str]) -> dict:
                 str(r)[:200] for r in reasons) or "fail-safe stop",
         }
 
-    match = _re.search(r"\{.*\}", (raw or "").strip(), _re.DOTALL)
-    if not match:
+    payload = first_json_object(raw)
+    if payload is None:
         return stopped("no JSON object in Brain reply")
-    try:
-        payload = json.loads(match.group(0))
-    except (ValueError, TypeError):
-        return stopped("malformed JSON in Brain reply")
-    if not isinstance(payload, dict):
-        return stopped("Brain reply is not a JSON object")
     stop = payload.get("stop")
     if not isinstance(stop, bool):
         return stopped(f"invalid stop {stop!r}: must be bool")
@@ -269,14 +265,8 @@ def parse_specialist_briefs(raw: str,
     angle each) — a partial or off-shortlist set is unusable. None means
     "fall back to the static template"; the advocate sessions still run.
     """
-    match = _re.search(r"\{.*\}", (raw or "").strip(), _re.DOTALL)
-    if not match:
-        return None
-    try:
-        payload = json.loads(match.group(0))
-    except (ValueError, TypeError):
-        return None
-    if not isinstance(payload, dict):
+    payload = first_json_object(raw)
+    if payload is None:
         return None
     briefs = payload.get("briefs")
     if not isinstance(briefs, list):

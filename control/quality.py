@@ -30,6 +30,7 @@ import json
 import re as _re
 from pathlib import Path
 
+from control.jsontext import first_json_object
 from control.paths import ROOT_DIR
 
 QUALITY_TOOLKIT: tuple[str, ...] = (
@@ -69,14 +70,34 @@ def _strip_footer(text: str) -> str:
     return _FOOTER_RE.sub("", text or "").strip(" .;—–-")
 
 
-def _gate_cite(gate_evidence: dict) -> str:
-    """Canonical, machine-owned rendering of the quality gate result."""
-    return "quality_gate: " + json.dumps({
+def gate_cite(gate_evidence: dict, label: str = "") -> str:
+    """Canonical, machine-owned rendering of the quality gate result.
+
+    `label` distinguishes the gate run on the ACTIVE image (after cleaning)
+    from the gate run on the original, so Part A never shows two anonymous
+    measurements of two different files.
+    """
+    prefix = "quality_gate" + (f"@{label}" if label else "")
+    return prefix + ": " + json.dumps({
         "quality_pass": gate_evidence.get("passed"),
         "flags": gate_evidence.get("flags", []),
         "metrics": gate_evidence.get("metrics", {}),
         "tool_error": gate_evidence.get("error") or None,
     }, ensure_ascii=False, sort_keys=True)
+
+
+def quality_binds(quality: dict, active_gate: dict) -> bool:
+    """May a round end `benign` on this image? Control decides, not prose.
+
+    Binds when the gate that ran on the ACTIVE image failed, or when the
+    Quality Agent itself said `flagged`. The gate term is what closes the
+    hole where an agent answers `cleaned` with a path whose gate still
+    fails (preprocess leaves this dataset blurry at 24.36), which used to
+    slip past the `verdict == "flagged"` test and allow a benign verdict
+    on an image the machine rejected.
+    """
+    return (not active_gate.get("passed", False)) \
+        or quality.get("verdict") == "flagged"
 
 
 def _release_llm() -> None:
@@ -98,7 +119,7 @@ def build_quality_repair_prompt(raw: str,
     # The retry used to be sent WITHOUT the gate evidence, so a model that
     # misread the first prompt could only fail the same way twice.
     evidence = ("\nControl-side evidence (authoritative, cite it):\n"
-                + _gate_cite(gate_evidence) + "\n"
+                + gate_cite(gate_evidence) + "\n"
                 if gate_evidence else "")
     return (
         "Your previous reply was rejected. " + defect + " Reply ONCE more "
@@ -192,15 +213,9 @@ def parse_quality(raw: str, gate_evidence: dict | None = None) -> dict:
             "cleaned_image": None,
         }
 
-    match = _re.search(r"\{.*\}", (raw or "").strip(), _re.DOTALL)
-    if not match:
+    payload = first_json_object(raw)
+    if payload is None:
         return flagged("no JSON object in Quality Agent reply")
-    try:
-        payload = json.loads(match.group(0))
-    except (ValueError, TypeError):
-        return flagged("malformed JSON in Quality Agent reply")
-    if not isinstance(payload, dict):
-        return flagged("Quality Agent reply is not a JSON object")
     verdict = payload.get("verdict")
     if verdict not in VALID_VERDICTS:
         return flagged(f"invalid verdict {verdict!r}: "
@@ -230,7 +245,7 @@ def parse_quality(raw: str, gate_evidence: dict | None = None) -> dict:
     if not result["reasons"] or not result["cites"]:
         return flagged("verdict lost its reasons/cites after footer removal")
     if gate_evidence:
-        result["control_cites"] = [_gate_cite(gate_evidence)]
+        result["control_cites"] = [gate_cite(gate_evidence)]
         failed = not gate_evidence.get("passed")
         if result["verdict"] == "pass" and failed:
             gate_flags = ",".join(gate_evidence.get("flags") or []) or "none"
@@ -307,14 +322,17 @@ def run_quality(record: dict, toolkit_text: str,
 
 
 def resolve_cleaned_image(record: dict, quality: dict,
-                          root: Path = ROOT_DIR) -> Path | None:
+                          root: Path = ROOT_DIR,
+                          expected: str | Path | None = None
+                          ) -> Path | None:
     """Path to the cleaned image downstream sessions should use, or None.
 
-    Only a `cleaned` verdict whose `cleaned_image` exists on disk
-    qualifies. Anything else — pass/flagged, a missing or fabricated
-    path — returns None so the round keeps the original image. Quality
-    never blocks, and sessions are never pointed at a file that is not
-    there (the plan.tmp §2.1 `cleaned` hand-off).
+    Only a `cleaned` verdict whose `cleaned_image` is exactly the path the
+    round OFFERED (when `expected` is given) and exists on disk qualifies.
+    A model-authored path is not evidence: without this check a session
+    could point the round at any file on the machine — another case's
+    image included. Anything else returns None so the round keeps the
+    original image (the plan.tmp §2.1 `cleaned` hand-off).
     """
     if quality.get("verdict") != "cleaned":
         return None
@@ -324,7 +342,15 @@ def resolve_cleaned_image(record: dict, quality: dict,
     path = Path(candidate).expanduser()
     if not path.is_absolute():
         path = root / path
-    return path if path.is_file() else None
+    if not path.is_file():
+        return None
+    if expected is not None:
+        want = Path(str(expected)).expanduser()
+        if not want.is_absolute():
+            want = root / want
+        if path.resolve() != want.resolve():
+            return None
+    return path
 
 
 def quality_line(quality: dict) -> str:

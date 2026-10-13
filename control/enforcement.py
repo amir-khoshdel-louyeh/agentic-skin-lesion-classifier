@@ -5,11 +5,9 @@ Consumer side: extract + Pydantic-validate; exactly one repair retry,
 then the verdict is logged invalid (never silently coerced).
 """
 
-import json
-import re
-
 from pydantic import ValidationError
 
+from control.jsontext import first_json_object
 from control.schemas import HAM10000_CLASSES, VerdictEnvelope
 
 
@@ -39,21 +37,14 @@ downstream reader. Omission is required; fabrication is the worst
 failure.
 """ % (list(HAM10000_CLASSES),)
 
-_JSON_OBJECT_RE = re.compile(r"\{.*\}", re.DOTALL)
-
-
 class EnvelopeError(ValueError):
     """Raised when raw agent output is not a valid verdict envelope."""
 
 
 def parse_envelope(raw: str) -> VerdictEnvelope:
-    match = _JSON_OBJECT_RE.search(raw.strip())
-    if not match:
+    payload = first_json_object(raw)
+    if payload is None:
         raise EnvelopeError("No JSON object found in agent output.")
-    try:
-        payload = json.loads(match.group(0))
-    except json.JSONDecodeError as exc:
-        raise EnvelopeError(f"Malformed JSON: {exc}") from exc
     try:
         return VerdictEnvelope(**payload)
     except ValidationError as exc:
