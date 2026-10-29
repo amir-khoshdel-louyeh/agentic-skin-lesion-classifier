@@ -7,6 +7,7 @@ brain agents are fixed responses, and receipt execution returns known JSON.
 No Ollama, OpenClaw, GPU or model checkpoint is used.
 """
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -171,6 +172,19 @@ def test_run_round_is_hermetic_and_rejects_unreceipted_claims(
     assert audit["sessions"][1]["confidence"] == 0.88
     assert audit["sessions"][0]["per_tool"][0]["class"] is None
     assert audit["sessions"][1]["per_tool"][0]["class"] == "Melanocytic nevi"
+
+    ledger = audit["receipts"]
+    assert len(ledger) == 1
+    receipt = ledger[0]
+    assert receipt["tool"] == "ham10000-cnn"
+    assert receipt["exit_code"] == 0
+    assert receipt["duration_ms"] is not None and receipt["duration_ms"] >= 0
+    assert receipt["image_sha256"] == hashlib.sha256(b"temporary image").hexdigest()
+    assert len(receipt["receipt_id"]) == 64
+    assert receipt["receipt_id"] == audit["sessions"][1]["per_tool"][0]["receipt_id"]
+    assert "Receipt ledger (content hashes)" in report
+    assert receipt["receipt_id"] in report
+    assert receipt["stdout_sha256"] in report
 
     emitted = [stage for stage, _payload in stages]
     assert {"quality", "brain", "session", "critic", "referee"} <= set(emitted)

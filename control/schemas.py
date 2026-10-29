@@ -31,6 +31,22 @@ class VerdictEnvelope(BaseModel, frozen=True):
     # ALL of them — otherwise a second, disagreeing model disappears.
     commands: list[StrictStr] = Field(default_factory=list)
     exit_code: StrictInt | None = None
+    # Content-addressed receipt ledger. These are written only after a
+    # control-side execution; agent-supplied envelopes cannot set them.
+    receipt_id: StrictStr | None = Field(
+        default=None, min_length=64, max_length=64, pattern=r"^[0-9a-f]{64}$"
+    )
+    command_sha256: StrictStr | None = Field(
+        default=None, min_length=64, max_length=64, pattern=r"^[0-9a-f]{64}$"
+    )
+    image_sha256: StrictStr | None = Field(
+        default=None, min_length=64, max_length=64, pattern=r"^[0-9a-f]{64}$"
+    )
+    stdout_sha256: StrictStr | None = Field(
+        default=None, min_length=64, max_length=64, pattern=r"^[0-9a-f]{64}$"
+    )
+    tool: StrictStr | None = Field(default=None, min_length=1)
+    duration_ms: StrictInt | None = Field(default=None, ge=0)
     predicted_class: StrictStr | None = None
     confidence: StrictFloat | None = Field(default=None, ge=0.0, le=1.0)
     reasoning: StrictStr = ""

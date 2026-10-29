@@ -20,7 +20,7 @@ from agents.runner import run_session
 from control.confidence import ENTROPY_ENV
 from control.critic import run_critic
 from control.decide import (RULE_DILEMMA, append_audit, build_report, decide,
-                       reliability_of)
+                       receipt_ledger_row, reliability_of)
 from control.specialists import (advocate_brief, confine_specialist,
                                    shortlist)
 from control.guard import run_guard
@@ -52,6 +52,13 @@ def file_sha256(path) -> str:
         return ""
 
 
+def _text_sha256(text: str) -> str:
+    """SHA-256 of UTF-8 text for the receipt ledger."""
+    import hashlib
+
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 def load_record(prompt_file: Path, index: int) -> dict:
     records = yaml.safe_load(prompt_file.read_text(encoding="utf-8"))
     if index < 0 or index >= len(records):
@@ -78,6 +85,7 @@ def verify_receipt(
     import json as _json
     import shlex
     import subprocess
+    import time as _time
 
     try:
         from control.vram import unload_ollama as _unload
@@ -87,10 +95,13 @@ def verify_receipt(
 
     cmd_text = (command or claimed.command or "").strip()
 
-    def rejected(reason: str) -> VerdictEnvelope:
+    def rejected(reason: str, *, exit_code=None,
+                 duration_ms=None) -> VerdictEnvelope:
         return VerdictEnvelope(
             ran=False,
             command=cmd_text or claimed.command,
+            exit_code=exit_code,
+            duration_ms=duration_ms,
             reasoning=f"Receipt rejected: {reason}",
             uncertainty_flags=["tool_failed"],
             agent_flags=list(claimed.uncertainty_flags),
@@ -127,6 +138,11 @@ def verify_receipt(
         # agents routinely emit unquoted/broken JSON here.
         cmd += ["--metadata", _json.dumps(record.get("metadata", {}))]
     execute = runner or subprocess.run
+    executed = shlex.join(cmd)
+    image_sha = file_sha256(record_image)
+    if not image_sha:
+        return rejected("image unreadable for receipt")
+    started = _time.perf_counter()
     try:
         proc = execute(
             cmd, capture_output=True, text=True, timeout=timeout,
@@ -134,15 +150,24 @@ def verify_receipt(
         )
     except Exception as exc:
         return rejected(f"re-execution failed: {exc}")
+    duration_ms = max(0, int(round((_time.perf_counter() - started) * 1000)))
     if proc.returncode != 0:
         return rejected(f"re-execution exit {proc.returncode}: "
-                        f"{proc.stderr.strip()[-300:]}")
+                        f"{proc.stderr.strip()[-300:]}",
+                        exit_code=proc.returncode, duration_ms=duration_ms)
     try:
         actual = _json.loads(proc.stdout)
     except (ValueError, TypeError):
-        return rejected("re-execution produced no JSON")
+        return rejected("re-execution produced no JSON",
+                        exit_code=proc.returncode, duration_ms=duration_ms)
     if actual.get("status") != "success":
-        return rejected(f"tool reported: {actual.get('message')}")
+        return rejected(f"tool reported: {actual.get('message')}",
+                        exit_code=proc.returncode, duration_ms=duration_ms)
+    stdout_sha = _text_sha256(proc.stdout or "")
+    command_sha = _text_sha256(executed)
+    receipt_id = _text_sha256("\0".join((
+        tool.name, executed, image_sha, stdout_sha, str(proc.returncode)
+    )))
     # (No class-mismatch branch: the single-writer return below always
     # carries the tool's own class; the agent's claim is only noted.)
     actual_conf = actual.get("confidence_score")
@@ -186,7 +211,13 @@ def verify_receipt(
         ran=True,
         command=cmd_text,
         commands=[cmd_text],
-        exit_code=0,
+        exit_code=proc.returncode,
+        receipt_id=receipt_id,
+        command_sha256=command_sha,
+        image_sha256=image_sha,
+        stdout_sha256=stdout_sha,
+        tool=tool.name,
+        duration_ms=duration_ms,
         predicted_class=actual.get("disease_name"),
         confidence=(None if actual_conf is None
                     else float(actual_conf)),
@@ -458,10 +489,16 @@ def run_round(
             "reliability": reliability_of(primary.reasoning),
             "reasoning": primary.reasoning,
             "per_tool": [
-                {"tool": session_tools(v.command),
+                {"tool": v.tool or session_tools(v.command),
                  "class": v.predicted_class,
                  "confidence": v.confidence,
-                 "reliability": reliability_of(v.reasoning)}
+                 "reliability": reliability_of(v.reasoning),
+                 "receipt_id": v.receipt_id,
+                 "exit_code": v.exit_code,
+                 "duration_ms": v.duration_ms,
+                 "command_sha256": v.command_sha256,
+                 "image_sha256": v.image_sha256,
+                 "stdout_sha256": v.stdout_sha256}
                 for v in verified_list
             ],
         })
@@ -594,6 +631,8 @@ def run_round(
         "cleaned_image": (str(cleaned_image) if cleaned_image else None),
         "steers": steers,
         "sessions": sessions_log,
+        "receipts": [receipt_ledger_row(v) for v in verdicts
+                     if v.receipt_id],
         "llm_sessions": (llm_sessions + 1 + brain_sessions + 1
                          + len(specialist_verdicts)),
         "timings": timings,

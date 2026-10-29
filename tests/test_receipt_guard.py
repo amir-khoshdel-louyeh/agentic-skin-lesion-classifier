@@ -1,6 +1,10 @@
 """Deterministic receipt verification with an injected tool executor."""
 
+import hashlib
 import json
+import shlex
+import sys
+from pathlib import Path
 
 import pytest
 
@@ -160,6 +164,40 @@ def test_every_claimed_tool_gets_its_own_receipt(harness):
     assert sum(row.ran for row in rows) == 1
     assert len(calls) == 1
     assert {row.ran for row in rows} == {True, False}
+
+
+def test_receipt_ledger_hashes_the_exact_execution(harness):
+    record, manifest, command = harness
+    stdout = json.dumps({
+        "status": "success",
+        "disease_name": "Melanoma",
+        "confidence_score": 0.91,
+        "uncertainty_flags": [],
+    })
+    result = orchestrator.verify_receipt(
+        claim(command, "Melanoma", 0.91),
+        record, manifest,
+        runner=lambda *args, **kwargs: Proc(stdout=stdout),
+    )
+
+    tool_path = (Path(__file__).resolve().parent.parent
+                 / "tools" / "ham10000_cnn.py").resolve()
+    executed = shlex.join([
+        sys.executable, str(tool_path), "--image", record["image_path"]
+    ])
+    image_sha = hashlib.sha256(b"image").hexdigest()
+    stdout_sha = hashlib.sha256(stdout.encode()).hexdigest()
+    receipt_id = hashlib.sha256("\0".join((
+        "ham10000-cnn", executed, image_sha, stdout_sha, "0"
+    )).encode()).hexdigest()
+
+    assert result.tool == "ham10000-cnn"
+    assert result.exit_code == 0
+    assert result.duration_ms is not None and result.duration_ms >= 0
+    assert result.command_sha256 == hashlib.sha256(executed.encode()).hexdigest()
+    assert result.image_sha256 == image_sha
+    assert result.stdout_sha256 == stdout_sha
+    assert result.receipt_id == receipt_id
 
 
 def test_duplicate_claims_do_not_create_extra_votes(harness):

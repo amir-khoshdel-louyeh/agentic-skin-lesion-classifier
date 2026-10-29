@@ -56,6 +56,20 @@ def receipt_tool(command: str) -> str:
     return command or "—"
 
 
+def receipt_ledger_row(verdict: VerdictEnvelope) -> dict:
+    """Audit/report projection of one content-addressed execution receipt."""
+    return {
+        "receipt_id": verdict.receipt_id,
+        "tool": verdict.tool or receipt_tool(verdict.command),
+        "command": verdict.command,
+        "command_sha256": verdict.command_sha256,
+        "image_sha256": verdict.image_sha256,
+        "stdout_sha256": verdict.stdout_sha256,
+        "exit_code": verdict.exit_code,
+        "duration_ms": verdict.duration_ms,
+    }
+
+
 def decide(
     verdicts: list[VerdictEnvelope],
     weights: dict[int, float] | None = None,
@@ -212,8 +226,8 @@ def build_report(
         "",
         "### Receipts (re-executed numbers only)",
         "",
-        "| # | tool | class | confidence | flags (tool) | flags (agent) | reliability |",
-        "|---|------|-------|------------|--------------|---------------|-------------",
+        "| # | tool | class | confidence | exit | ms | flags (tool) | flags (agent) | reliability | receipt |",
+        "|---|------|-------|------------|------|----|--------------|---------------|-------------|---------",
     ]
     for i, v in enumerate(verdicts):
         agent_flags = ",".join(str(f)[:40] for f in v.agent_flags) or "none"
@@ -221,15 +235,39 @@ def build_report(
             f"| {i + 1} | {receipt_tool(v.command)} | "
             f"{v.predicted_class or '—'} | "
             f"{v.confidence if v.confidence is not None else '—'} | "
+            f"{v.exit_code if v.exit_code is not None else '—'} | "
+            f"{v.duration_ms if v.duration_ms is not None else '—'} | "
             f"{','.join(v.uncertainty_flags) or 'none'} | "
             f"{agent_flags} | "
-            f"{reliability_of(v.reasoning)} |"
+            f"{reliability_of(v.reasoning)} | "
+            f"{v.receipt_id or '—'} |"
         )
     tools_seen = [receipt_tool(v.command) for v in verdicts
                   if v.is_countable()]
     if len(tools_seen) > len(set(tools_seen)):
         lines += ["", "- Note: repeated rows come from the same tool and add "
                   "no independent evidence; the referee counts each tool once."]
+    receipted = [v for v in verdicts if v.receipt_id]
+    lines += ["", "### Receipt ledger (content hashes)", ""]
+    if receipted:
+        lines += [
+            "| receipt | tool | exit | ms | command sha256 | image sha256 | stdout sha256 |",
+            "|---|---|------|----|----------------|--------------|----------------|",
+        ]
+        for v in receipted:
+            lines.append(
+                f"| {v.receipt_id} | {v.tool or receipt_tool(v.command)} | "
+                f"{v.exit_code if v.exit_code is not None else '—'} | "
+                f"{v.duration_ms if v.duration_ms is not None else '—'} | "
+                f"{v.command_sha256 or '—'} | {v.image_sha256 or '—'} | "
+                f"{v.stdout_sha256 or '—'} |"
+            )
+        lines.append(
+            "- Receipt id = sha256(tool, exact executed command, image sha256, "
+            "stdout sha256, exit code)."
+        )
+    else:
+        lines += ["- No execution receipts this round."]
     lines += ["", "### Quality"]
     if quality:
         cleaned = (f" → {quality['cleaned_image']}"
