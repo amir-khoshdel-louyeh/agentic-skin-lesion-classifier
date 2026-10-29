@@ -109,6 +109,16 @@ def main() -> int:
     else:
         weights, model_tag, temperature = (
             WEIGHTS_DIR / "model.pth", "derm_cnn_ham10000", TEMPERATURE)
+    # A locally rebuilt checkpoint writes the temperature fitted on its own
+    # validation split. Prefer it over the legacy constants, which belonged
+    # to the original (uncommitted) weights.
+    calibration_path = WEIGHTS_DIR / "calibration.json"
+    if calibration_path.exists():
+        try:
+            payload = json.loads(calibration_path.read_text(encoding="utf-8"))
+            temperature = float(payload.get("temperature", temperature))
+        except (OSError, ValueError, TypeError):
+            pass
     model = None
     try:
         arch = load_arch()

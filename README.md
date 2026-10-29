@@ -1,713 +1,166 @@
-﻿# Agentic Skin Lesion Classifier
+# Agentic Skin Lesion Classifier
 
-An agent-driven dermatology screening system that orchestrates multiple CNN models through OpenClaw to balance inference speed, diagnostic confidence, and workflow flexibility.
+A local, agent-orchestrated dermoscopy screening workflow: specialised CNN tools, an LLM supervisor loop, an adversarial critic and a deterministic referee that produces a receipt-backed two-part report.
 
-> **Portfolio Project** — Demonstrates Agentic AI orchestration, Computer Vision workflows, multi-model inference strategies, and structured reporting pipelines.
+![Agent execution](assets/agent-demo.png)
 
----
+`Python` · `PyTorch` · `OpenClaw` · `Ollama` · Agentic AI / medical imaging · Research prototype
 
-## Operator Quickstart (Phases 0–5)
+## At a glance
 
-```bash
-python3 -m venv .venv --system-site-packages
-.venv/bin/pip install pyyaml pydantic torch torchvision opencv-python-headless scikit-learn
-ollama pull qwen3:8b
-openclaw models set "ollama/qwen3:8b"   # + register provider (see report/phase0_baseline.md)
-openclaw skills install --force ./openclaw-skills/quality
-openclaw skills install --force ./openclaw-skills/brain
-openclaw skills install --force ./openclaw-skills/diagnostic
-openclaw skills install --force ./openclaw-skills/critic
-openclaw skills install --force ./openclaw-skills/specialist
-openclaw skills install --force ./openclaw-skills/chat
+| | |
+|---|---|
+| **Idea** | Let an LLM agent choose and sequence specialised vision tools, while deterministic code owns the numbers |
+| **Tools** | EfficientNet-B0 (fast), EfficientNet-B4 (balanced), ViT-Large, locally trained 28×28 triage CNN, DermAI |
+| **Orchestration** | Quality → brain loop (up to 7 sessions) → critic → specialists → referee |
+| **Outputs** | Structured JSON, confidence, Markdown report with re-executed receipts |
+| **Tests** | 18 script-style test files; **not runnable under `pytest`** (they call `SystemExit` at import) |
+| **Verified here** | Triage model rebuilt from ISIC 2019 and executes successfully; the LLM round remains inconclusive because the agent did not issue a tool command |
+| **Role** | Solo — agent design, tool contracts, orchestration, reporting |
 
-.venv/bin/python main.py --record-index 0  # single round
-.venv/bin/python main.py --no-interactive  # all records, sequential
-.venv/bin/python main.py --chat --record 0 # physician debate (needs a round report first)
-```
+## Overview
 
-Design docs: `proposal.tmp` (architecture), `plan.tmp` (phases).
-Contracts: `tools/manifest.yaml` (tools), `prompts/*.system.md` (locked) +
-`prompts/*.doctor.md` (physician-editable, thresholds 0.6–0.9, only toward
-caution — validate with `.venv/bin/python main.py --doctor-check`; rounds
-fail fast on invalid edits).
-Reports land in `report/` (per-round files are git-ignored runtime artifacts).
+Single-model skin-lesion classifiers produce one number and no audit trail. This project treats the classifier as one tool among several and asks a different question: can an agent coordinate fast and slow models, challenge its own conclusion, and leave a report whose every numeric claim can be re-derived?
 
-Known limits: triage CNN overconfident, VLM weights rejected after
-benchmark, shared AK blind spot, 8B agents need receipt verification
-(see `report/phase5_validation.md`). Research use only.
+The design separates three responsibilities. **LLM agents** decide quality, route, tools and when to stop. **Deterministic code** owns thresholds, VRAM limits, receipt re-execution and the final tally. **The referee** writes the machine-decided part of the report without an LLM. The result is an agentic system that can be wrong in its reasoning but cannot silently invent a probability.
 
----
-
-## System Demonstration
-
-![Structured Output](assets/system-demonstration.gif)
-
-### System Workflow (current: Quality → Brain-loop → Critic → Specialists → Referee)
+## Pipeline
 
 ```text
 Input image
-      │
-      ▼
-Prompt records in prompt.yaml
-      │
-      ▼
-1. QUALITY AGENT (LLM thinker): pass / cleaned / flagged.
-   Never diagnoses, never stops the round.
-      │
-      ▼
-2. BRAIN-LOOP (LLM supervisor + up to 7 thinker sessions):
-   Steer 1 → Session 1 → receipt → Steer 2 → Session 2 → receipt →
-   Steer 3 → Session 3. Brain may stop early. Every session sees the
-   FULL diagnostic pool and chooses its own tools.
-      │
-      ▼
-3. CRITIC (LLM, once per round, post-loop only):
-   object-with-cites or silence. Sustained objection forces refer.
-      │
-      ▼
-4. SPECIALISTS (LLM, max 2, only on ≥2 distinct classes):
-   Brain-written advocate briefs, A vs B. Off-shortlist = no-evidence.
-      │
-      ▼
-5. REFEREE (plain code, NO LLM): counts + writes the two-part report.
-      │
-      ▼
-Receipt re-execution control-side for every claim (single-writer numbers)
-      │
-      ▼
-Two-part Markdown report in report/ (Part A machine-decides,
-Part B LLM-voices explain — deleting Part B changes nothing)
+   │
+   ▼
+1. Quality agent ── pass / cleaned / flagged (never diagnoses)
+   │
+   ▼
+2. Brain loop ── supervisor steers up to 7 sessions;
+   each session sees the full tool pool and must cite receipts
+   │
+   ▼
+3. Critic ── one post-loop objection with citations, or silence
+   │
+   ▼
+4. Specialists ── max 2 advocate briefs when ≥2 classes are plausible
+   │
+   ▼
+5. Referee (plain code, no LLM) ── counts, thresholds, report
+   │
+   ▼
+Receipt re-execution control-side → two-part Markdown report
 ```
 
-No deterministic code decides quality/route/tool/stop. Code acts as
-referee (receipts, VRAM, thresholds), never as decider. Design docs:
-`proposal.tmp` (architecture), `plan.tmp` (all 12 TODOs complete).
+Every tool call returns a receipt. The control side re-executes those calls to confirm the values that appear in the report, so the narrative cannot drift from the measured output.
 
-### Agent Execution Demo
+## Screenshots
 
-![Agent Execution Demo](assets/agent-demo.png)
+| Structured output | Example report |
+|---|---|
+| ![](assets/json-output.png) | ![](assets/example-report.png) |
 
-### Example Report
+A full end-to-end recording is available as [`assets/system-demonstration.gif`](assets/system-demonstration.gif) (10 MB).
 
-![Example Report](assets/example-report.png)
+## Tool layer
 
----
+| Tool | Model | Intended role |
+|---|---|---|
+| Fast screening | EfficientNet-B0 | Low-latency first pass |
+| Balanced screening | EfficientNet-B4 | Accuracy/confidence trade-off |
+| High-capacity | ViT-Large | Difficult or ambiguous cases |
+| Triage CNN | Compact 28×28 PyTorch CNN | Locally trained seven-class baseline |
+| DermAI | CNN baseline | Independent second opinion |
+| VLM | Qwen2-VL | **Rejected after benchmarking** — retained for reference only |
 
-## Highlights
+Calibration profiles for each model live in `calibration/`, with a summary in `calibration/SUMMARY.md`. The agent receives calibrated probabilities rather than raw logits.
 
-* Agent-driven model orchestration using OpenClaw
-* Multi-model inference pipeline with specialized screening tiers
-* EfficientNet-B0 for low-latency first-pass analysis
-* EfficientNet-B4 for balanced accuracy and confidence
-* Structured JSON outputs for downstream automation
-* Prompt-driven execution and tool selection
-* Modular architecture designed for extensibility
-
-### Built With
-
-Python • PyTorch • timm • OpenClaw • Computer Vision • Agentic AI • Ollama
-
----
-
-## Why This Project Matters
-
-Most skin lesion classification projects focus on a single model and a single prediction output.
-
-This project explores a different approach:
-
-Instead of relying on one classifier, multiple diagnostic tools are exposed to an AI agent that can select the most appropriate inference path depending on task requirements.
-
-The goal is not only image classification but also demonstrating how agentic systems can orchestrate specialized AI tools, manage inference workflows, and generate structured outputs suitable for future clinical decision-support pipelines.
-
-This project showcases concepts increasingly relevant to modern AI engineering:
-
-* Agentic AI
-* Tool orchestration
-* Multi-model systems
-* Explainable workflows
-* Modular AI architectures
-
----
-
-# Overview
-
-This project provides a local skin lesion screening workflow that combines Computer Vision models with OpenClaw-based agent orchestration.
-
-The system allows image-based screening through multiple model tiers and supports prompt-driven execution via CLI tools and OpenClaw skills.
-
-The primary objective is to demonstrate how an AI agent can coordinate specialized diagnostic tools through clear command contracts and structured outputs.
-
----
-
-# Problem Statement
-
-Traditional skin lesion classification workflows often suffer from one or more of the following limitations:
-
-* Dependence on a single model regardless of context
-* Lack of clear escalation paths between fast and accurate models
-* Tight coupling between inference and orchestration logic
-* Limited support for structured downstream processing
-
-As a result, extending or adapting these systems becomes increasingly difficult as complexity grows.
-
-This project addresses these limitations through a modular, agent-oriented architecture that separates orchestration, inference, and reporting responsibilities.
-
----
-
-# Solution Approach
-
-The solution consists of three primary layers:
-
-### Inference Layer
-
-Provides specialized diagnostic tools:
-
-* Fast Screening Tool (`EfficientNet-B0`)
-* Balanced Screening Tool (`EfficientNet-B4`)
-* ViT-Large Model (`ViT-Large`)
-
-### Orchestration Layer
-
-Provides agent-based tool selection and execution:
-
-* OpenClaw Skills
-* Prompt Processing
-* Command Routing
-
-### Reporting Layer
-
-Provides structured outputs:
-
-* JSON Results
-* Confidence Scores
-* Markdown Reports
-
-Workflow:
+## Repository structure
 
 ```text
-Input Image
-      │
-      ▼
-OpenClaw Agent
-      │
-      ▼
-Tool Selection
-      │
-      ├── Fast Model (B0)
-      │
-      ├── Mid Model (B4)
-      │
-      └── ViT-Large Model
-      │
-      ▼
-Model Inference
-      │
-      ▼
-Structured JSON Output
-      │
-      ▼
-Final Report
+agentic-skin-lesion-classifier/
+├── main.py                  # CLI entry point
+├── orchestrator.py          # Round orchestration
+├── skin_agent.py            # Agent-facing facade
+├── agents/runner.py         # LLM session runner
+├── control/                 # Routing, quality, critic, referee, receipts
+├── tools/                   # CNN/VLM tool implementations and manifest
+├── prompts/                 # Locked system prompts and doctor-editable prompts
+├── openclaw-skills/         # Installed OpenClaw skills
+├── calibration/             # Per-model calibration profiles
+├── tests/                   # 18 standalone test scripts
+└── assets/                  # Demo and report screenshots
 ```
 
----
-
-# Demo
-
-## Running the Agent
+## Running
 
 ```bash
-python main.py --record-index 0
+python3 -m venv .venv --system-site-packages
+.venv/bin/pip install -r requirements.txt
+ollama pull qwen3:8b
+openclaw models set "ollama/qwen3:8b"
+
+openclaw skills install --force ./openclaw-skills/quality
+# … brain, diagnostic, critic, specialist, chat
+
+.venv/bin/python main.py --record-index 0      # one round
+.venv/bin/python main.py --no-interactive      # all records, sequentially
+.venv/bin/python main.py --chat --record 0     # physician debate after a round
 ```
 
----
+Reports are written to `report/` (git-ignored per-round artefacts). Design notes are in `proposal.tmp` and `plan.tmp`; the tool contract is `tools/manifest.yaml`.
 
-## Direct Tool Invocation
+### Dataset and local triage model
 
-Balanced model:
+The original development weights were never committed (`models/` is git-ignored), so the following rebuilds the seven-class 28×28 checkpoint from the local ISIC 2019 tree:
 
 ```bash
-python tools/skin_lesion_mid.py 
-  --image path/to/image.jpg 
-  --metadata '{"age":62,"sex":"male"}'
+cp -al ../DataSet/. dataset/ISIC2019_full/
+.venv/bin/python tools/train_triage_model.py --max-per-class 2500 --epochs 8
 ```
 
-High model:
+The trainer writes `models/derm-cnn/model.py`, `labels.json`, `model.pth`, `calibration.json` and `metrics.json`. It excludes SCC because the tool's `ISIC_TO_CLASS` contract has no SCC mapping. The fitted calibration is read by `tools/ham10000_cnn.py`.
 
-```bash
-python tools/skin_lesion_high.py 
-  --image path/to/image.jpg 
-  --metadata '{"age":62,"sex":"male"}'
-```
+## Verification
 
----
+- `openclaw --version` reports `2026.7.1-2`; the default agent model was switched from `ollama/qwen3:8b` to `ollama/qwen2.5-coder:14b` for the second orchestration attempt.
+- `tools/quality_gate.py --image dataset/ISIC2019_test/ISIC_0000000.jpg` returned `status: success` with `blur_variance 58.21`, `mean_brightness 146.01`, `clipped_fraction 0.0044`, and the `blurry` uncertainty flag.
+- The first round completed in 4m38s on `ISIC_0000002.jpg` (quality pass: blur variance 484.86, mean brightness 150.6, clipped fraction 0.0109) and wrote `report/round_0_20261113_165727.md` plus `audit.jsonl`. A later round wrote `report/round_0_20261113_171943.md` after five sessions, but the agent issued no tool command, so both rounds returned `inconclusive — no receipted verdicts`.
+- A rerun with `qwen2.5-coder:14b` reached the 700-second timeout without producing a new report; that model was too slow for the full seven-session loop in this environment.
+- The local triage checkpoint was rebuilt from **9,087 training / 2,272 held-out validation** images (8 epochs, seed 42): **validation accuracy 0.4124**, fitted temperature **1.1**. Per-class recall ranges from 0.286 (benign keratosis) to 0.824 (vascular lesions); SCC was excluded. These are measurements for this compact rebuild, not the original uncommitted weights.
+- `tools/ham10000_cnn.py --image dataset/ISIC2019_test/ISIC_0000002.jpg` returned `status: success` with `Dermatofibroma` at `confidence_score 0.5594`, proving the label/checkpoint contract now loads.
+- `isic-vit` still has no `models/isic-vit-b16/best.pt`, so only the rebuilt triage CNN is executable; the report does not claim a second-model consensus.
 
-## OpenClaw Skill Installation
+## Tests
 
-One role skill per chain step (replaces the retired tier skills):
-
-```bash
-for s in quality brain diagnostic critic specialist chat; do
-  openclaw --no-color skills install --force ./openclaw-skills/$s
-done
-```
-
-OpenClaw agents read case images from its own workspace, so every round
-needs those files staged there. That copy can drift from the dataset when
-images change, which used to surface as media-path errors mid-round. Re-sync
-it with the maintenance helper (idempotent; run it after updating the
-dataset, or at any time to check):
-
-```bash
-python stage_openclaw_media.py --check   # report drift only, exit 1 if stale
-python stage_openclaw_media.py           # hard-link missing/updated images
-python stage_openclaw_media.py --prune   # also drop images no longer used
-```
-
-Files are hard-linked, so the staged copy shares inodes with the dataset and
-costs no extra space; a cross-device target falls back to a byte copy.
-`--prune` is opt-in and refuses targets outside the OpenClaw workspace.
-
----
-
-## Example Output
-
-![Structured Output](assets/json-output.png)
-
----
-
-# Features
-
-* Tiered diagnostic workflow
-* Agent-based tool selection
-* Prompt-driven execution
-* Structured JSON inference output
-* Confidence scoring
-* Metadata-aware processing
-* OpenClaw skill integration
-* Extensible model architecture
-* Local-first deployment
-* Modular CLI tooling
-
----
-
-# Results & Metrics
-
-### Dataset
-
-The models used in this pipeline were fine-tuned and validated using the **HAM10000** dataset ("Human Against Machine with 10000 dermatoscopic images").
-
-* **Total Images:** 10,015 dermatoscopic cases
-* **Classes (7 Categories):** Actinic keratoses, Basal cell carcinoma, Benign keratosis, Dermatofibroma, Melanoma, Melanocytic nevi, Vascular lesions.
-
----
-
-### Model Performance Comparison
-
-These are the **legacy tier tools' reported** results (the chain no longer
-routes by tier — every diagnostic session chooses freely from the full
-pool). Reproduce current numbers on a local split with
-`python benchmark.py` (see [Testing & Verification](#testing--verification)).
-
-| Model Tier | Model Architecture | Reported Acc. | Avg. Inference Time | Resource Footprint | Best Used For |
-| :--- | :--- | :---: | :---: | :---: | :--- |
-| **Tier 1: Fast** | `EfficientNet-B0` | ~74.2% | **~12ms** | Ultra-Lightweight | Rapid initial triage, mobile/edge scenarios |
-| **Tier 2: Mid** | `EfficientNet-B4` | ~81.5% | ~35ms | Balanced | Standard automated screening |
-| **Tier 3: High** | `ViT-Large` | **~88.9%** | ~140ms | Heavy (GPU recommended) | Escalation paths, high-ambiguity cases |
-
----
-
-# Architecture
-
-## High-Level Architecture
-
-The system follows a decoupled, agent-driven orchestration architecture where the OpenClaw agent acts as a central router. It evaluates incoming user prompts and dynamically invokes specialized tools based on performance constraints and confidence requirements.
-
-### System Data Flow
+The `tests/` directory contains **18 standalone scripts**, not pytest modules. Several execute assertions at import time and call `SystemExit`, so `pytest tests` fails during collection:
 
 ```text
-[ User Input: Image + Metadata ]
-                │
-                ▼
-   ┌─────────────────────────┐
-   │  Quality Agent (LLM)    │ pass / cleaned / flagged (never diagnoses)
-   └─────────────────────────┘
-                │
-                ▼
-   ┌─────────────────────────┐
-   │  Brain Supervisor (LLM) │ text-only steerer, NO tools, NO images
-   └──────┬──────────────────┘
-          │ steer 1..7 (hint-only subset) / early stop
-          ▼
-   ┌─────────────────────────┐
-   │ Diagnostic Sessions     │ up to 7 isolated thinkers, FULL pool,
-   │ (LLM + tools)           │ free 1..n tool choice each
-   └─────────────────────────┘
-                │ re-executed receipts only (single-writer numbers)
-                ▼
-   ┌─────────────────────────┐
-   │  Critic (LLM, once)     │ object-with-cites or silence
-   └─────────────────────────┘
-                │
-                ▼
-   ┌─────────────────────────┐
-   │  Specialists (LLM, ≤2)  │ Brain-written briefs, A vs B advocates
-   └─────────────────────────┘
-                │
-                ▼
-   ┌─────────────────────────┐
-   │  Referee (plain code)   │ counts + two-part report + audit
-   └─────────────────────────┘
-                │
-                ├─► Part A: receipt table + Quality line + decision + rule
-                │
-                └─► Part B: steers, reasoning, critic, advocates (zero vote)
+INTERNALERROR ... SystemExit: 0
+no tests ran
 ```
 
----
-
-### Agent Layer
-
-Location:
-
-```text
-skin_agent.py  (OpenClaw CLI bridge — transport only)
-```
-
-Responsibilities:
-
-* One isolated OpenClaw session per call (own session id)
-* Text transport to/from the local agent
-* No decisions: quality/route/tool/stop live in the LLM roles or the
-  plain-code referee, never here
-
----
-
-### Skill Layer
-
-Location:
-
-```text
-openclaw-skills/
-```
-
-Responsibilities:
-
-* Agent instructions
-* Tool contracts
-* Execution metadata
-
----
-
-# Technical Highlights
-
-* Agentic AI workflow design
-* Multi-model orchestration
-* Modular CLI architecture
-* Structured machine-readable outputs
-* Prompt-driven execution pipeline
-* Extensible skill-based architecture
-* Metadata-aware classification
-* Reusable tool contracts
-* OpenClaw integration
-* Local-first AI deployment
-
----
-
-# Engineering Decisions
-
-## Why Agentic Architecture?
-
-Instead of embedding all logic into a single application, responsibilities are separated across tools and orchestration layers.
-
-Benefits:
-
-* Easier extensibility
-* Better maintainability
-* Improved tool reuse
-* Clear separation of concerns
-
----
-
-## Why EfficientNet?
-
-EfficientNet offers a strong balance between performance and computational efficiency.
-
-### EfficientNet-B0
-
-Chosen for:
-
-* Fast inference
-* Low resource requirements
-* Rapid first-pass screening
-
-### EfficientNet-B4
-
-Chosen for:
-
-* Improved representation quality
-* Better classification performance
-* Higher diagnostic confidence
-
-### ViT-Large
-
-Chosen for:
-
-* Maximum diagnostic confidence and SOTA feature extraction
-* Robust performance on highly ambiguous or borderline cases
-* Reliable high-tier escalation layer within the agentic workflow
-
----
-
-## Why OpenClaw?
-
-OpenClaw enables orchestration to remain independent from model implementation.
-
-Benefits:
-
-* Tool abstraction
-* Modular workflows
-* Prompt-based routing
-* Future scalability
-
----
-
-# Challenges & Lessons Learned
-
-## Challenge 1: Tiered Model Coordination
-
-Designing meaningful separation between fast and balanced screening paths required clear execution boundaries and tool responsibilities.
-
-### Solution
-
-* Dedicated command contracts
-* Independent tool interfaces
-* Explicit model roles
-
----
-
-## Challenge 2: Agent-to-Tool Communication
-
-Reliable orchestration depends on predictable tool behavior and outputs.
-
-### Solution
-
-* Structured JSON responses
-* Standardized input formats
-* Consistent CLI interfaces
-
----
-
-## Challenge 3: Metadata Handling
-
-User-provided metadata can vary significantly in structure and completeness.
-
-### Solution
-
-* Validation layers
-* Safe parsing logic
-* Fallback handling strategies
-
----
-
-# Lessons Learned
-
-Through this project I strengthened my understanding of:
-
-* Agentic AI systems
-* Tool orchestration
-* Multi-model architectures
-* Computer Vision deployment
-* CLI application design
-* Structured AI workflows
-* Software modularity
-* AI system extensibility
-
----
-
-# Repository Structure
-
-```text
-.
-├── openclaw-skills/
-│   ├── quality/ brain/ diagnostic/ critic/ specialist/ chat/
-│   │   └── SKILL.md  (one role skill per chain step)
-│
-├── control/
-│   ├── quality.py brain.py critic.py specialists.py  (chain roles)
-│   ├── decide.py (referee + two-part report)  manifest.py
-│   ├── prompts.py (4 roles: orchestrator/agent/quality/brain)
-│   ├── guard.py router.py (plain tool wrappers, no decisions)
-│   ├── controller.py chat.py (post-lock Q&A sidecar)
-│   └── vram.py (sequential-GPU rails)
-│
-├── agents/
-│   └── runner.py  (isolated FULL-pool thinker sessions)
-│
-├── prompts/
-│   ├── *.system.md (locked) + *.doctor.md (physician-editable)
-│
-├── tools/
-│   ├── ham10000_cnn.py multimodal_fusion.py ensemble_high.py
-│   ├── dermai_b0.py skin_lesion_mid/high.py (legacy, callable)
-│   ├── isic_common.py isic_efficientnet_b4/resnet50/vit.py
-│   ├── lesion_segmentation.py (MedSAM, support tier)
-│   ├── quality_gate.py preprocess.py abcde_analyzer.py (Quality only)
-│   └── manifest.yaml (single source of WHAT exists)
-│
-├── tests/
-│   └── test_routing.py test_quality.py test_brain.py test_diagnostic.py
-│       test_single_writer.py test_critic.py test_specialists.py
-│       test_two_part.py test_skills.py test_safety.py test_chain.py
-│       test_contract.py test_grounding.py test_receipt.py test_eval.py
-│
-├── orchestrator.py  (chain: Quality → Brain-loop → Critic →
-│                      Specialists → Referee)
-├── skin_agent.py  (OpenClaw CLI transport)
-├── main.py  (CLI: rounds + grounded chat)
-├── benchmark.py  (score ready tools with control/eval)
-├── gui.py  (cases-only browser: list + preview + report status)
-├── prompt.yaml
-├── requirements.txt
-└── README.md
-```
-
----
-
-# Getting Started
-
-## Clone Repository
+Run them individually instead:
 
 ```bash
-git clone https://github.com/amir-khoshdel-louyeh/agentic-skin-lesion-classifier.git
-
-cd agentic-skin-lesion-classifier
+for t in tests/test_*.py; do echo "== $t"; python3 "$t" || break; done
 ```
 
----
+Converting them to ordinary pytest functions (or guarding the entry points) is the cleanest next step. The scripts cover routing, receipts, critic behaviour, grounding, safety, single-writer numbers, specialists and two-part report generation.
 
-## Create Virtual Environment
+## Design principles
 
-Windows:
+- **The LLM is not the authority.** Authorisation, thresholds, receipts and the final report are deterministic.
+- **Receipts over prose.** Every number in the report is re-executed control-side.
+- **Two-part reports.** Part A is machine-decided; Part B is LLM-voiced explanation. Deleting Part B changes nothing factual.
+- **Prompts are versioned.** System prompts are locked; physician-editable prompts are constrained and validated (`--doctor-check`).
 
-```bash
-py -3.11 -m venv .venv
+## Tech stack
 
-.\.venv\Scripts\Activate.ps1
-```
-
-Linux/macOS:
-
-```bash
-python3 -m venv .venv
-
-source .venv/bin/activate
-```
-
----
-
-## Install Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
----
-
-## Install OpenClaw Skills
-
-```bash
-for s in quality brain diagnostic critic specialist chat; do
-  openclaw --no-color skills install --force ./openclaw-skills/$s
-done
-```
-
----
-
-## Run Demo
-
-```bash
-python main.py --record-index 0
-```
-
----
-
-# Testing & Verification
-
-Chain acceptance + unit checks (most need no GPU/LLM; `test_receipt.py`
-needs weights).
-
-### Automated Verification
-
-```bash
-for t in tests/test_*.py; do .venv/bin/python "$t"; done
-```
-
-- `test_chain.py` — chain order, audit voices, autonomy, Q&A vote stands
-- `test_two_part.py` — Part A/Part B split, delete-Part-B identity
-- `test_routing.py` — deterministic routing stays retired
-- `test_quality.py` — Quality verdicts + cleaned-image hand-off
-- `test_session_reliability.py` — exact-line execution, repair retry
-- `test_eval.py` — ground truth, held-out split, benchmark entry point
-- `test_receipt.py` — live single-writer re-execution (needs weights)
-
-Benchmark ready diagnostic tools on the labelled split (no training):
-
-```bash
-python benchmark.py --dry-run --split heldout   # inspect the split
-python benchmark.py --split heldout --tools ham10000-cnn,multimodal-fusion
-```
-
-Manual verification (single tools, needs weights):
-
-```bash
-python tools/ham10000_cnn.py --image path/to/image.jpg
-
-python tools/isic_resnet50.py --image path/to/image.jpg
-
-python tools/isic_vit.py --image path/to/image.jpg
-
-python tools/lesion_segmentation.py --image path/to/image.jpg
-
-python main.py --record-index 0
-```
-
-### Expected Outcome
-
-* Successful image validation
-* Model inference execution
-* Structured JSON output
-* Generated report
-
----
-
-# Future Improvements
-
-* Add deep-tier specialist models
-* Add ensemble decision-making
-* Add automated evaluation pipelines
-* Add unit and integration testing
-* Add GitHub Actions CI/CD
-* Add FastAPI service layer
-* Add web-based interface
-* Add explainability visualizations (Grad-CAM)
-* Add confidence calibration workflows
-* Add model monitoring
-
----
-
-# Author
-
-## Amir Khoshdel Louyeh
-
-### Connect
-
-* **GitHub:** [github.com/amir-khoshdel-louyeh](https://github.com/amir-khoshdel-louyeh)
-* **LinkedIn:** [linkedin.com/in/amir-khoshdel-louyeh](https://www.linkedin.com/in/amir-khoshdel-louyeh)
-
----
+`Python` · `PyTorch` / `torchvision` / `transformers` · `OpenClaw` · `Ollama` · `PyYAML` · `pydantic` · Markdown reporting
 
 ## Disclaimer
 
-This project is intended for educational and research purposes only. It is not a medical device and should not be used for clinical diagnosis or treatment decisions.
+This is not a medical device. It must not be used for diagnosis, triage or treatment decisions. All outputs are research artefacts.
 
-This project is open-source and available under the **MIT License**.
+## Author
+
+**Amir Khoshdel Louyeh**
+[GitHub](https://github.com/amir-khoshdel-louyeh) · [LinkedIn](https://www.linkedin.com/in/amir-khoshdel-louyeh)
