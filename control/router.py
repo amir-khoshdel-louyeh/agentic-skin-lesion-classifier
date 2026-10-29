@@ -13,7 +13,10 @@ import json
 import subprocess
 import sys
 
+from pydantic import ValidationError
+
 from control.paths import ROOT_DIR, resolve
+from control.schemas import ToolResult
 
 
 def run_abcde(image: str) -> dict:
@@ -35,16 +38,19 @@ def run_abcde(image: str) -> dict:
         return {"risk_band": "", "score": None, "flags": ["tool_failed"],
                 "error": proc.stderr.strip()[-200:]}
     try:
-        payload = json.loads(proc.stdout)
-    except (ValueError, TypeError):
+        payload = ToolResult.model_validate(json.loads(proc.stdout))
+    except (ValidationError, ValueError, TypeError) as exc:
         return {"risk_band": "", "score": None, "flags": ["tool_failed"],
-                "error": "no JSON output"}
-    if payload.get("status") != "success":
+                "error": f"invalid tool JSON: {str(exc)[:200]}"}
+    if payload.status != "success":
         return {"risk_band": "", "score": None, "flags": ["tool_failed"],
-                "error": str(payload.get("message"))[:200]}
-    return {"risk_band": str(payload.get("risk_band", "")).lower(),
-            "score": payload.get("abcde_score"),
-            "flags": list(payload.get("uncertainty_flags") or []),
+                "error": str(payload.message)[:200]}
+    if not payload.risk_band:
+        return {"risk_band": "", "score": None, "flags": ["tool_failed"],
+                "error": "ABCDE tool omitted risk_band"}
+    return {"risk_band": payload.risk_band.lower(),
+            "score": payload.abcde_score,
+            "flags": list(payload.uncertainty_flags),
             "error": ""}
 
 
@@ -80,17 +86,21 @@ def probe_preprocess(image: str, timeout: int = 300) -> dict:
                 return {"hair_pixels": 0, "improved": False,
                         "error": proc.stderr.strip()[-200:] or "exit!=0"}
             try:
-                payload = json.loads(proc.stdout)
-            except (ValueError, TypeError):
+                payload = ToolResult.model_validate(json.loads(proc.stdout))
+            except (ValidationError, ValueError, TypeError) as exc:
                 return {"hair_pixels": 0, "improved": False,
-                        "error": "no JSON output"}
-            if payload.get("status") != "success":
+                        "error": f"invalid tool JSON: {str(exc)[:200]}"}
+            if payload.status != "success":
                 return {"hair_pixels": 0, "improved": False,
-                        "error": str(payload.get("message"))[:200]}
-            before = payload.get("quality_pass_before")
-            after = payload.get("quality_pass_after")
-            return {"hair_pixels": int(payload.get("hair_pixels_inpainted") or 0),
-                    "improved": bool(before is False and after is True),
+                        "error": str(payload.message)[:200]}
+            if (payload.quality_pass_before is None
+                    or payload.quality_pass_after is None
+                    or payload.hair_pixels_inpainted is None):
+                return {"hair_pixels": 0, "improved": False,
+                        "error": "preprocess omitted quality/result fields"}
+            return {"hair_pixels": payload.hair_pixels_inpainted,
+                    "improved": (payload.quality_pass_before is False
+                                 and payload.quality_pass_after is True),
                     "error": ""}
     except Exception as exc:  # noqa: BLE001 - evidence, not crash
         return {"hair_pixels": 0, "improved": False,

@@ -35,7 +35,8 @@ from control.quality import (QUALITY_TOOLKIT, gate_cite, quality_binds,
                              quality_line, resolve_cleaned_image,
                              run_quality)
 from control.router import run_abcde
-from control.schemas import VerdictEnvelope
+from control.schemas import ToolResult, VerdictEnvelope
+from pydantic import ValidationError
 
 
 def file_sha256(path) -> str:
@@ -156,13 +157,25 @@ def verify_receipt(
                         f"{proc.stderr.strip()[-300:]}",
                         exit_code=proc.returncode, duration_ms=duration_ms)
     try:
-        actual = _json.loads(proc.stdout)
+        raw_payload = _json.loads(proc.stdout)
     except (ValueError, TypeError):
         return rejected("re-execution produced no JSON",
                         exit_code=proc.returncode, duration_ms=duration_ms)
-    if actual.get("status") != "success":
-        return rejected(f"tool reported: {actual.get('message')}",
+    try:
+        actual = ToolResult.model_validate(raw_payload)
+    except ValidationError as exc:
+        return rejected(f"invalid tool JSON: {str(exc)[:300]}",
                         exit_code=proc.returncode, duration_ms=duration_ms)
+    if actual.status != "success":
+        return rejected(f"tool reported: {actual.message}",
+                        exit_code=proc.returncode, duration_ms=duration_ms)
+    if (tool.category == "diagnostic"
+            and (actual.disease_name is None
+                 or actual.confidence_score is None)):
+        return rejected(
+            "diagnostic success omitted disease_name/confidence_score",
+            exit_code=proc.returncode, duration_ms=duration_ms,
+        )
     stdout_sha = _text_sha256(proc.stdout or "")
     command_sha = _text_sha256(executed)
     receipt_id = _text_sha256("\0".join((
@@ -170,7 +183,7 @@ def verify_receipt(
     )))
     # (No class-mismatch branch: the single-writer return below always
     # carries the tool's own class; the agent's claim is only noted.)
-    actual_conf = actual.get("confidence_score")
+    actual_conf = actual.confidence_score
     # Single-writer principle: numbers come ONLY from re-execution, never
     # from agent text. The agent's numbers are kept as a reliability
     # signal (exact/rounded/fabricated), but the verdict always carries
@@ -189,7 +202,7 @@ def verify_receipt(
     # A class the agent named that the tool did not produce is its own
     # integrity signal (the old code had no class-mismatch branch at all).
     # Display only: agent text still never moves the verdict.
-    actual_cls = actual.get("disease_name")
+    actual_cls = actual.disease_name
     if claimed.predicted_class and actual_cls \
             and claimed.predicted_class != actual_cls:
         reliability = "class_mismatch"
@@ -198,7 +211,7 @@ def verify_receipt(
     # agent_flags as an advisory signal only: it used to flow straight into
     # the referee, which let a session invent a referral.
     tool_flags = [
-        f for f in (actual.get("uncertainty_flags") or [])
+        f for f in actual.uncertainty_flags
         if f in ("borderline", "no_evidence", "tool_failed", "disagreement")
     ]
     flags = list(dict.fromkeys(
@@ -218,7 +231,7 @@ def verify_receipt(
         stdout_sha256=stdout_sha,
         tool=tool.name,
         duration_ms=duration_ms,
-        predicted_class=actual.get("disease_name"),
+        predicted_class=actual_cls,
         confidence=(None if actual_conf is None
                     else float(actual_conf)),
         reasoning=note,
@@ -284,22 +297,22 @@ def run_ensemble_verdict(record: dict, timeout: int = 600,
     if proc.returncode != 0:
         return None
     try:
-        payload = _json.loads(proc.stdout)
-    except (ValueError, TypeError):
+        payload = ToolResult.model_validate(_json.loads(proc.stdout))
+    except (ValidationError, ValueError, TypeError):
         return None
-    if payload.get("status") != "success":
+    if (payload.status != "success" or payload.disease_name is None
+            or payload.confidence_score is None):
         return None
     try:
         return VerdictEnvelope(
             ran=True,
             command=" ".join(cmd),
             exit_code=0,
-            predicted_class=payload.get("disease_name"),
-            confidence=(None if payload.get("confidence_score") is None
-                        else float(payload["confidence_score"])),
+            predicted_class=payload.disease_name,
+            confidence=float(payload.confidence_score),
             reasoning="control-side ensemble vote (careful route)",
             uncertainty_flags=[
-                f for f in (payload.get("uncertainty_flags") or [])
+                f for f in payload.uncertainty_flags
                 if f in ("borderline", "no_evidence", "tool_failed",
                          "disagreement")],
         )

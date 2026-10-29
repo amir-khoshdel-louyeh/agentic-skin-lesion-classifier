@@ -13,7 +13,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+from pydantic import ValidationError
+
 from control.paths import ROOT_DIR, resolve
+from control.schemas import ToolResult
 
 
 def run_guard(image: str) -> dict:
@@ -35,15 +38,18 @@ def run_guard(image: str) -> dict:
         return {"passed": False, "metrics": {}, "flags": ["tool_failed"],
                 "error": proc.stderr.strip()[-200:]}
     try:
-        payload = json.loads(proc.stdout)
-    except (ValueError, TypeError):
+        payload = ToolResult.model_validate(json.loads(proc.stdout))
+    except (ValidationError, ValueError, TypeError) as exc:
         return {"passed": False, "metrics": {}, "flags": ["tool_failed"],
-                "error": "no JSON output"}
-    if payload.get("status") != "success":
+                "error": f"invalid tool JSON: {str(exc)[:200]}"}
+    if payload.status != "success":
         return {"passed": False, "metrics": {},
                 "flags": ["tool_failed"],
-                "error": str(payload.get("message"))[:200]}
-    return {"passed": bool(payload.get("quality_pass")),
-            "metrics": payload.get("metrics", {}),
-            "flags": list(payload.get("uncertainty_flags") or []),
+                "error": str(payload.message)[:200]}
+    if payload.quality_pass is None:
+        return {"passed": False, "metrics": {}, "flags": ["tool_failed"],
+                "error": "quality gate omitted quality_pass"}
+    return {"passed": payload.quality_pass,
+            "metrics": payload.metrics or {},
+            "flags": list(payload.uncertainty_flags),
             "error": ""}

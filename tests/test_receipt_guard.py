@@ -166,6 +166,34 @@ def test_every_claimed_tool_gets_its_own_receipt(harness):
     assert {row.ran for row in rows} == {True, False}
 
 
+@pytest.mark.parametrize("payload", [
+    {"status": "success", "disease_name": "Melanoma",
+     "confidence_score": "0.9"},
+    {"status": "success", "disease_name": "Melanoma",
+     "confidence_score": 1.2},
+    {"status": "success", "disease_name": "Not a class",
+     "confidence_score": 0.9},
+    {"status": "success", "disease_name": "Melanoma"},
+    {"status": "success", "confidence_score": 0.9},
+    {"status": "success", "disease_name": "Melanoma",
+     "confidence_score": 0.9, "uncertainty_flags": "borderline"},
+    {"status": "success", "disease_name": "Melanoma",
+     "confidence_score": 0.9, "predicted_class_index": "1"},
+])
+def test_malformed_tool_json_never_becomes_evidence(harness, payload):
+    record, manifest, command = harness
+    result = orchestrator.verify_receipt(
+        claim(command, "Melanoma", 0.9),
+        record, manifest,
+        runner=lambda *args, **kwargs: Proc(stdout=json.dumps(payload)),
+    )
+
+    assert result.ran is False
+    assert result.predicted_class is None
+    assert result.confidence is None
+    assert "invalid tool JSON" in result.reasoning
+
+
 def test_receipt_ledger_hashes_the_exact_execution(harness):
     record, manifest, command = harness
     stdout = json.dumps({
