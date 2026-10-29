@@ -14,7 +14,7 @@ A local, agent-orchestrated dermoscopy screening workflow: specialised CNN tools
 | **Tools** | EfficientNet-B0 (fast), EfficientNet-B4 (balanced), ViT-Large, locally trained 28×28 triage CNN, DermAI |
 | **Orchestration** | Quality → brain loop (up to 7 sessions) → critic → specialists → referee |
 | **Outputs** | Structured JSON, confidence, Markdown report with re-executed receipts |
-| **Tests** | 31 pytest tests: 18 converted check suites plus deterministic receipt and inference-guard cases |
+| **Tests** | 32 pytest tests: 18 converted check suites plus deterministic receipt, inference-guard and end-to-end round cases |
 | **Verified here** | Triage model rebuild and pytest suite pass; receipt and timeout guards are unit-tested; the live LLM round remains inconclusive because the agent did not issue a tool command |
 | **Role** | Solo — agent design, tool contracts, orchestration, reporting |
 
@@ -85,7 +85,7 @@ agentic-skin-lesion-classifier/
 ├── prompts/                 # Locked system prompts and doctor-editable prompts
 ├── openclaw-skills/         # Installed OpenClaw skills
 ├── calibration/             # Per-model calibration profiles
-├── tests/                   # 31 pytest tests (converted check suites + guards)
+├── tests/                   # 32 pytest tests (converted check suites + guards)
 └── assets/                  # Demo and report screenshots
 ```
 
@@ -128,7 +128,7 @@ The trainer writes `models/derm-cnn/model.py`, `labels.json`, `model.pth`, `cali
 - The local triage checkpoint was rebuilt from **9,087 training / 2,272 held-out validation** images (8 epochs, seed 42): **validation accuracy 0.4124**, fitted temperature **1.1**. Per-class recall ranges from 0.286 (benign keratosis) to 0.824 (vascular lesions); SCC was excluded. These are measurements for this compact rebuild, not the original uncommitted weights.
 - `tools/ham10000_cnn.py --image dataset/ISIC2019_test/ISIC_0000002.jpg` returned `status: success` with `Dermatofibroma` at `confidence_score 0.5594`, proving the label/checkpoint contract now loads.
 - `isic-vit` still has no `models/isic-vit-b16/best.pt`, so only the rebuilt triage CNN is executable; the report does not claim a second-model consensus.
-- `.venv/bin/python -m pytest tests -q` reports **31 passed**. The converted check suites and the deterministic receipt/inference-guard units run without import-time exits; the two legacy receipt integration checks use the local triage checkpoint.
+- `.venv/bin/python -m pytest tests -q` reports **32 passed**. The converted check suites and the deterministic receipt/inference-guard/end-to-end round units run without import-time exits; the two legacy receipt integration checks use the local triage checkpoint.
 
 ## Tests
 
@@ -138,7 +138,7 @@ The 18 former standalone check scripts now run as ordinary pytest tests. They no
 .venv/bin/python -m pytest tests -q
 ```
 
-Current coverage is **31 tests**: the 18 converted suites (routing, receipts, critic behaviour, grounding, safety, single-writer numbers, specialists, two-part reports and the rest), six deterministic receipt-verification tests, and seven inference timeout/retry tests.
+Current coverage is **32 tests**: the 18 converted suites (routing, receipts, critic behaviour, grounding, safety, single-writer numbers, specialists, two-part reports and the rest), six deterministic receipt-verification tests, seven inference timeout/retry tests, and one hermetic end-to-end round test.
 
 The receipt tests inject a fake tool executor, so they prove deterministically that an agent's claimed tool becomes evidence only after a successful control-side execution. Failed, invalid, mismatched, non-pool or unexecuted commands return `ran=False` with no class or confidence. Two legacy integration checks still execute the local triage checkpoint; the agent-side guard tests use fake CLI/HTTP backends and do not start Ollama or OpenClaw.
 

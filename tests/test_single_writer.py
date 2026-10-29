@@ -70,7 +70,8 @@ def test_single_writer_checks():
     check("claims-verified-twice", orch_text.count("run_session(") == 2,
           "session + specialist call sites")
     check("verify-injected",
-          orch_text.count("verify_receipts(c, active_record, manifest)") == 2,
+          orch_text.count("verify_receipts(c, active_record, manifest") == 2
+          and orch_text.count("runner=receipt_runner") == 2,
           "both call sites re-execute the active (possibly cleaned) image")
     check("no-unverified-append",
           "verdicts.extend(verified_list)" in orch_text

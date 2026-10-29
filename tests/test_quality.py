@@ -284,6 +284,7 @@ def test_quality_checks():
     check("orchestrator-uses-cleaned", "resolve_cleaned_image(" in orch_text
           and '"cleaned_image"' in orch_text)
     check("orchestrator-active-record", "active_record" in orch_text
-          and orch_text.count("verify_receipts(c, active_record, manifest)") == 2)
+          and orch_text.count("verify_receipts(c, active_record, manifest") == 2
+          and orch_text.count("runner=receipt_runner") == 2)
 
     assert not failures, f"{len(failures)} failures: {failures}"

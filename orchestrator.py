@@ -284,6 +284,7 @@ def run_round(
     borderline_threshold: float | None = None,
     careful: bool = False,
     on_stage=None,
+    receipt_runner=None,
 ) -> Path:
     """Run one screening round. `on_stage` (optional) receives
     (stage, payload) progress events — quality/brain/session/critic/
@@ -426,7 +427,8 @@ def run_round(
                         "why": order.get("why", "")})
         verified_list = run_session(
             dict(active_record), diag_manifest_text,
-            lambda c: verify_receipts(c, active_record, manifest),
+            lambda c: verify_receipts(c, active_record, manifest,
+                                     runner=receipt_runner),
             agent_id=agent_id, quality_text=quality_text,
             steer=order["steer"], hint=order["suggested_subset"])
         llm_sessions += 1
@@ -527,7 +529,8 @@ def run_round(
             confine_specialist(v, disease, diseases)
             for v in run_session(
                 record_with_role, diag_manifest_text,
-                lambda c: verify_receipts(c, active_record, manifest),
+                lambda c: verify_receipts(c, active_record, manifest,
+                                     runner=receipt_runner),
                 agent_id=agent_id, quality_text=quality_text)
         ]
         specialist_verdicts.extend(confined)
