@@ -33,7 +33,9 @@ def test_docs_gui_checks():
           or "Brain loop" in readme)
     check("readme-no-screen-path", "screen (clear cases, NO LLM)" not in readme)
     roles = ("quality", "brain", "diagnostic", "critic", "specialist", "chat")
-    check("readme-role-skills", "./openclaw-skills/quality" in readme
+    check("readme-role-skills",
+          ("./openclaw-skills/quality" in readme
+           or "./openclaw-skills/$skill" in readme)
           and all(role in readme for role in roles), str(roles))
     check("readme-no-tier-install",
           "skills/skin-lesion-fast" not in readme)
