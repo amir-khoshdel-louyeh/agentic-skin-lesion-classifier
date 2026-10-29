@@ -1,6 +1,5 @@
 """Session reliability checks (stdlib only, no LLM/tools needed).
-Run: .venv/bin/python tests/test_session_reliability.py
-Exit non-zero on any failure.
+Run: .venv/bin/python -m pytest tests/test_session_reliability.py
 
 The core guarantee: every sub-agent can execute a tool and return an
 answer without fabrication. Command-form errors are eliminated by
@@ -28,246 +27,246 @@ from control.manifest import (  # noqa: E402
 )
 from control.schemas import VerdictEnvelope  # noqa: E402
 
-failures = []
+def test_session_reliability_checks():
+    failures = []
 
 
-def check(name, cond, detail=""):
-    print(("PASS " if cond else "FAIL ") + name
-          + (f" — {detail}" if detail and not cond else ""))
-    if not cond:
-        failures.append(name)
+    def check(name, cond, detail=""):
+        print(("PASS " if cond else "FAIL ") + name
+              + (f" — {detail}" if detail and not cond else ""))
+        if not cond:
+            failures.append(name)
 
 
-manifest = load_manifest(ROOT / "tools" / "manifest.yaml")
-pool = diagnostic_pool(manifest)
-record = {"image_path": "dataset/ISIC2019_test/ISIC_0000002.jpg",
-          "metadata": {"patient_id": "A001", "age": 60, "sex": "female"}}
-case_text = render_subset_for_case(manifest, tuple(pool), record)
-# Optionally a metadata tool for the renderer checks below; the pool may
-# contain none of them after a calibration change.
-meta_case = render_subset_for_case(manifest, ("multimodal-fusion",), record)
+    manifest = load_manifest(ROOT / "tools" / "manifest.yaml")
+    pool = diagnostic_pool(manifest)
+    record = {"image_path": "dataset/ISIC2019_test/ISIC_0000002.jpg",
+              "metadata": {"patient_id": "A001", "age": 60, "sex": "female"}}
+    case_text = render_subset_for_case(manifest, tuple(pool), record)
+    # Optionally a metadata tool for the renderer checks below; the pool may
+    # contain none of them after a calibration change.
+    meta_case = render_subset_for_case(manifest, ("multimodal-fusion",), record)
 
-# 1. Pre-rendered lines: complete, runnable, nothing to fill in.
-check("lines-have-real-image",
-      "dataset/ISIC2019_test/ISIC_0000002.jpg" in case_text)
-check("lines-have-real-metadata",
-      '"patient_id": "A001"' in meta_case or '"patient_id":"A001"' in
-      meta_case.replace(" ", ""))
-# The renderer fills --metadata for metadata-requiring tools. The
-# calibrated pool may contain none of them at a given time, so exercise
-# the renderer directly with a known metadata tool instead of assuming
-# membership.
-meta_lines = [line for line in meta_case.splitlines()
-              if "multimodal-fusion" in line]
-check("lines-need-metadata-only-where-required",
-      bool(meta_lines) and "--metadata" in meta_lines[0],
-      "metadata tool line missing")
-cmd_lines = [line for line in case_text.splitlines()
-             if line.startswith("- ")]
-check("lines-no-placeholders", all("<path" not in line
-      and "<json" not in line for line in cmd_lines)
-      and len(cmd_lines) == len(pool))
-check("lines-python-prefix", all(
-    line.split("`")[1].startswith("python tools/")
-    for line in case_text.splitlines() if line.startswith("- ")))
-try:
-    render_subset_for_case(manifest, ("nope-tool",), record)
-    check("unknown-tool-fails-fast", False, "no KeyError raised")
-except KeyError:
-    check("unknown-tool-fails-fast", True)
+    # 1. Pre-rendered lines: complete, runnable, nothing to fill in.
+    check("lines-have-real-image",
+          "dataset/ISIC2019_test/ISIC_0000002.jpg" in case_text)
+    check("lines-have-real-metadata",
+          '"patient_id": "A001"' in meta_case or '"patient_id":"A001"' in
+          meta_case.replace(" ", ""))
+    # The renderer fills --metadata for metadata-requiring tools. The
+    # calibrated pool may contain none of them at a given time, so exercise
+    # the renderer directly with a known metadata tool instead of assuming
+    # membership.
+    meta_lines = [line for line in meta_case.splitlines()
+                  if "multimodal-fusion" in line]
+    check("lines-need-metadata-only-where-required",
+          bool(meta_lines) and "--metadata" in meta_lines[0],
+          "metadata tool line missing")
+    cmd_lines = [line for line in case_text.splitlines()
+                 if line.startswith("- ")]
+    check("lines-no-placeholders", all("<path" not in line
+          and "<json" not in line for line in cmd_lines)
+          and len(cmd_lines) == len(pool))
+    check("lines-python-prefix", all(
+        line.split("`")[1].startswith("python tools/")
+        for line in case_text.splitlines() if line.startswith("- ")))
+    try:
+        render_subset_for_case(manifest, ("nope-tool",), record)
+        check("unknown-tool-fails-fast", False, "no KeyError raised")
+    except KeyError:
+        check("unknown-tool-fails-fast", True)
 
-# 2. Prompt: exact-lines choice + prerequisite ban + null-numbers.
-from control.enforcement import JSON_INSTRUCTION  # noqa: E402
+    # 2. Prompt: exact-lines choice + prerequisite ban + null-numbers.
+    from control.enforcement import JSON_INSTRUCTION  # noqa: E402
 
-check("envelope-null-rule", "to null ALWAYS" in JSON_INSTRUCTION
-      and "NEVER report" in JSON_INSTRUCTION
-      and "ONLY source of numbers" in JSON_INSTRUCTION)
-prompt = build_agent_prompt(record, case_text, quality_text="Quality: pass",
-                            steer="Check.", hint=["ham10000-cnn"])
-check("prompt-null-numbers", "to null" in prompt
-      and "ALWAYS" in prompt
-      and "NEVER write tool numbers" in prompt)
-check("prompt-execution-first", "FIRST run at least one tool" in prompt
-      and "Intent without execution counts as no evidence" in prompt)
-check("prompt-quality-never-blocks", "NEVER block" in prompt
-      or "never blocks tool execution" in prompt)
-check("prompt-exact-lines", "EXACTLY as written" in prompt
-      and "copy-paste" in prompt)
-check("prompt-no-prerequisite", "NO" in prompt
-      and "cleaned-image prerequisite" in prompt
-      and "Never refuse for a missing cleaned image" in prompt)
+    check("envelope-null-rule", "to null ALWAYS" in JSON_INSTRUCTION
+          and "NEVER report" in JSON_INSTRUCTION
+          and "ONLY source of numbers" in JSON_INSTRUCTION)
+    prompt = build_agent_prompt(record, case_text, quality_text="Quality: pass",
+                                steer="Check.", hint=["ham10000-cnn"])
+    check("prompt-null-numbers", "to null" in prompt
+          and "ALWAYS" in prompt
+          and "NEVER write tool numbers" in prompt)
+    check("prompt-execution-first", "FIRST run at least one tool" in prompt
+          and "Intent without execution counts as no evidence" in prompt)
+    check("prompt-quality-never-blocks", "NEVER block" in prompt
+          or "never blocks tool execution" in prompt)
+    check("prompt-exact-lines", "EXACTLY as written" in prompt
+          and "copy-paste" in prompt)
+    check("prompt-no-prerequisite", "NO" in prompt
+          and "cleaned-image prerequisite" in prompt
+          and "Never refuse for a missing cleaned image" in prompt)
 
-# 3. run_session: claim → verify → one targeted repair → verify.
-calls = []
-
-
-def _envelope(command, ran=True, cls="Melanoma", conf=0.8):
-    return {"ran": ran, "command": command,
-            "exit_code": 0 if ran else 1,
-            "predicted_class": cls if ran else None,
-            "confidence": conf if ran else None, "reasoning": "r",
-            "uncertainty_flags": []}
+    # 3. run_session: claim → verify → one targeted repair → verify.
+    calls = []
 
 
-GOOD = ("python tools/ham10000_cnn.py --image "
-        "dataset/ISIC2019_test/ISIC_0000002.jpg")
-BAD = "skin-lesion-mid --image dataset/ISIC2019_test/ISIC_0000002.jpg"
+    def _envelope(command, ran=True, cls="Melanoma", conf=0.8):
+        return {"ran": ran, "command": command,
+                "exit_code": 0 if ran else 1,
+                "predicted_class": cls if ran else None,
+                "confidence": conf if ran else None, "reasoning": "r",
+                "uncertainty_flags": []}
 
 
-def _verify(claimed):
-    if claimed.command == GOOD:
-        return VerdictEnvelope(
-            ran=True, command=GOOD, exit_code=0,
-            predicted_class="Melanoma", confidence=0.7,
-            reasoning="re-executed", uncertainty_flags=[])
-    return VerdictEnvelope(ran=False, command=claimed.command,
-                           reasoning="Receipt rejected: command not in "
-                                     "verifiable form",
-                           uncertainty_flags=["tool_failed"])
+    GOOD = ("python tools/ham10000_cnn.py --image "
+            "dataset/ISIC2019_test/ISIC_0000002.jpg")
+    BAD = "skin-lesion-mid --image dataset/ISIC2019_test/ISIC_0000002.jpg"
 
 
-def _cli_factory(scripts):
-    def _cli(prompt, agent_id="main", show_command=True):
-        calls.append(prompt)
-        return {"payloads": [{"text": json.dumps(scripts[len(calls) - 1])}]}
-    return _cli
+    def _verify(claimed):
+        if claimed.command == GOOD:
+            return VerdictEnvelope(
+                ran=True, command=GOOD, exit_code=0,
+                predicted_class="Melanoma", confidence=0.7,
+                reasoning="re-executed", uncertainty_flags=[])
+        return VerdictEnvelope(ran=False, command=claimed.command,
+                               reasoning="Receipt rejected: command not in "
+                                         "verifiable form",
+                               uncertainty_flags=["tool_failed"])
 
 
-_real = runner_mod.run_openclaw_cli
-
-# 3a. Bad command → one repair → good command verifies.
-calls.clear()
-runner_mod.run_openclaw_cli = _cli_factory(
-    [_envelope(BAD), _envelope(GOOD)])
-try:
-    out = run_session(record, case_text, _verify, quality_text="Q",
-                      steer="S")
-    check("repair-converts-rejection", out[0].ran is True
-          and out[0].predicted_class == "Melanoma"
-          and len(calls) == 2, f"{out} calls={len(calls)}")
-    check("repair-prompt-names-defect", BAD in calls[1]
-          and "REJECTED" in calls[1] and "EXACT lines" in calls[1])
-except Exception as exc:  # noqa: BLE001
-    check("repair-converts-rejection", False, f"raised: {exc}")
-    check("repair-prompt-names-defect", False, f"raised: {exc}")
-finally:
-    runner_mod.run_openclaw_cli = _real
-
-# 3b. Genuine ran=false passes through with NO retry.
-calls.clear()
-runner_mod.run_openclaw_cli = _cli_factory([_envelope("x", ran=False)])
-try:
-    out = run_session(record, case_text, _verify)
-    check("genuine-false-untouched", out[0].ran is False
-          and len(calls) == 1, f"{out} calls={len(calls)}")
-except Exception as exc:  # noqa: BLE001
-    check("genuine-false-untouched", False, f"raised: {exc}")
-finally:
-    runner_mod.run_openclaw_cli = _real
-
-# 3c. Repair also bad → first rejection stands, exactly 2 calls.
-calls.clear()
-runner_mod.run_openclaw_cli = _cli_factory(
-    [_envelope(BAD), _envelope("also bad")])
-try:
-    out = run_session(record, case_text, _verify)
-    check("double-rejection-stands", out[0].ran is False
-          and len(calls) == 2, f"{out} calls={len(calls)}")
-except Exception as exc:  # noqa: BLE001
-    check("double-rejection-stands", False, f"raised: {exc}")
-finally:
-    runner_mod.run_openclaw_cli = _real
-
-# 3d. Verifier crash becomes no-evidence, never raises.
+    def _cli_factory(scripts):
+        def _cli(prompt, agent_id="main", show_command=True):
+            calls.append(prompt)
+            return {"payloads": [{"text": json.dumps(scripts[len(calls) - 1])}]}
+        return _cli
 
 
-def _boom_verify(claimed):
-    raise RuntimeError("verifier down")
+    _real = runner_mod.run_openclaw_cli
+
+    # 3a. Bad command → one repair → good command verifies.
+    calls.clear()
+    runner_mod.run_openclaw_cli = _cli_factory(
+        [_envelope(BAD), _envelope(GOOD)])
+    try:
+        out = run_session(record, case_text, _verify, quality_text="Q",
+                          steer="S")
+        check("repair-converts-rejection", out[0].ran is True
+              and out[0].predicted_class == "Melanoma"
+              and len(calls) == 2, f"{out} calls={len(calls)}")
+        check("repair-prompt-names-defect", BAD in calls[1]
+              and "REJECTED" in calls[1] and "EXACT lines" in calls[1])
+    except Exception as exc:  # noqa: BLE001
+        check("repair-converts-rejection", False, f"raised: {exc}")
+        check("repair-prompt-names-defect", False, f"raised: {exc}")
+    finally:
+        runner_mod.run_openclaw_cli = _real
+
+    # 3b. Genuine ran=false passes through with NO retry.
+    calls.clear()
+    runner_mod.run_openclaw_cli = _cli_factory([_envelope("x", ran=False)])
+    try:
+        out = run_session(record, case_text, _verify)
+        check("genuine-false-untouched", out[0].ran is False
+              and len(calls) == 1, f"{out} calls={len(calls)}")
+    except Exception as exc:  # noqa: BLE001
+        check("genuine-false-untouched", False, f"raised: {exc}")
+    finally:
+        runner_mod.run_openclaw_cli = _real
+
+    # 3c. Repair also bad → first rejection stands, exactly 2 calls.
+    calls.clear()
+    runner_mod.run_openclaw_cli = _cli_factory(
+        [_envelope(BAD), _envelope("also bad")])
+    try:
+        out = run_session(record, case_text, _verify)
+        check("double-rejection-stands", out[0].ran is False
+              and len(calls) == 2, f"{out} calls={len(calls)}")
+    except Exception as exc:  # noqa: BLE001
+        check("double-rejection-stands", False, f"raised: {exc}")
+    finally:
+        runner_mod.run_openclaw_cli = _real
+
+    # 3d. Verifier crash becomes no-evidence, never raises.
 
 
-runner_mod.run_openclaw_cli = _cli_factory([_envelope(GOOD)])
-try:
-    out = run_session(record, case_text, _boom_verify)
-    check("verify-crash-safe", out[0].ran is False, str(out))
-except Exception as exc:  # noqa: BLE001
-    check("verify-crash-safe", False, f"raised: {exc}")
-finally:
-    runner_mod.run_openclaw_cli = _real
-
-# 3e. A session may run 1..n tools: every claimed command is verified
-# and returned as its own row, so a second (possibly disagreeing) model
-# cannot disappear behind the first one.
-SECOND = ("python tools/isic_vit.py --image "
-          "dataset/ISIC2019_test/ISIC_0000002.jpg")
+    def _boom_verify(claimed):
+        raise RuntimeError("verifier down")
 
 
-def _envelope_two(command):
-    return {"ran": True, "command": command,
-            "commands": [GOOD, SECOND], "exit_code": 0,
-            "predicted_class": None, "confidence": None,
-            "reasoning": "ran both", "uncertainty_flags": []}
+    runner_mod.run_openclaw_cli = _cli_factory([_envelope(GOOD)])
+    try:
+        out = run_session(record, case_text, _boom_verify)
+        check("verify-crash-safe", out[0].ran is False, str(out))
+    except Exception as exc:  # noqa: BLE001
+        check("verify-crash-safe", False, f"raised: {exc}")
+    finally:
+        runner_mod.run_openclaw_cli = _real
+
+    # 3e. A session may run 1..n tools: every claimed command is verified
+    # and returned as its own row, so a second (possibly disagreeing) model
+    # cannot disappear behind the first one.
+    SECOND = ("python tools/isic_vit.py --image "
+              "dataset/ISIC2019_test/ISIC_0000002.jpg")
 
 
-def _verify_all(claimed):
-    rows = []
-    for cmd in claimed.command_list():
-        rows.append(VerdictEnvelope(
-            ran=True, command=cmd, exit_code=0,
-            predicted_class=("Melanoma" if "vit" in cmd
-                             else "Melanocytic nevi"),
-            confidence=0.8, reasoning="re-executed",
-            uncertainty_flags=[]))
-    return rows
+    def _envelope_two(command):
+        return {"ran": True, "command": command,
+                "commands": [GOOD, SECOND], "exit_code": 0,
+                "predicted_class": None, "confidence": None,
+                "reasoning": "ran both", "uncertainty_flags": []}
 
 
-calls.clear()
-runner_mod.run_openclaw_cli = _cli_factory([_envelope_two(GOOD)])
-try:
-    out = run_session(record, case_text, _verify_all)
-    check("multi-tool-all-receipted", len(out) == 2
-          and {v.predicted_class for v in out} == {"Melanoma",
-                                                   "Melanocytic nevi"},
-          str(out))
-    check("multi-tool-disagreement-visible",
-          len({v.command for v in out}) == 2, str(out))
-except Exception as exc:  # noqa: BLE001
-    check("multi-tool-all-receipted", False, f"raised: {exc}")
-    check("multi-tool-disagreement-visible", False, f"raised: {exc}")
-finally:
-    runner_mod.run_openclaw_cli = _real
+    def _verify_all(claimed):
+        rows = []
+        for cmd in claimed.command_list():
+            rows.append(VerdictEnvelope(
+                ran=True, command=cmd, exit_code=0,
+                predicted_class=("Melanoma" if "vit" in cmd
+                                 else "Melanocytic nevi"),
+                confidence=0.8, reasoning="re-executed",
+                uncertainty_flags=[]))
+        return rows
 
-# 4. Repair prompt carries the defect + exact lines + schema.
-repair = build_receipt_repair_prompt(BAD, "Receipt rejected: bad form",
-                                     case_text, "Q", "S")
-check("repair-prompt-complete", BAD in repair and "bad form" in repair
-      and "EXACT lines" in repair and "Reply ONCE" in repair
-      and "JSON object" in repair)
 
-# 5. Skill documents exact-lines + ban + null envelope.
-skill = (ROOT / "openclaw-skills" / "diagnostic" / "SKILL.md"
-         ).read_text(encoding="utf-8")
-check("skill-exact-lines", "copy-paste" in skill
-      and "EXACT pre-filled" in skill)
-check("skill-no-prerequisite", "NO" in skill
-      and "cleaned-image prerequisite" in skill)
-check("skill-null-envelope", '"predicted_class": null' in skill
-      and "NEVER write tool numbers" in skill)
+    calls.clear()
+    runner_mod.run_openclaw_cli = _cli_factory([_envelope_two(GOOD)])
+    try:
+        out = run_session(record, case_text, _verify_all)
+        check("multi-tool-all-receipted", len(out) == 2
+              and {v.predicted_class for v in out} == {"Melanoma",
+                                                       "Melanocytic nevi"},
+              str(out))
+        check("multi-tool-disagreement-visible",
+              len({v.command for v in out}) == 2, str(out))
+    except Exception as exc:  # noqa: BLE001
+        check("multi-tool-all-receipted", False, f"raised: {exc}")
+        check("multi-tool-disagreement-visible", False, f"raised: {exc}")
+    finally:
+        runner_mod.run_openclaw_cli = _real
 
-# 6. Null-claim flows: agent reports nulls, re-execution fills them —
-# one call, no repair, final numbers from the referee.
-calls.clear()
-runner_mod.run_openclaw_cli = _cli_factory(
-    [_envelope(GOOD, cls=None, conf=None)])
-try:
-    out = run_session(record, case_text, _verify)
-    check("null-claim-filled", out[0].ran is True
-          and out[0].predicted_class == "Melanoma"
-          and out[0].confidence == 0.7 and len(calls) == 1,
-          f"{out} calls={len(calls)}")
-except Exception as exc:  # noqa: BLE001
-    check("null-claim-filled", False, f"raised: {exc}")
-finally:
-    runner_mod.run_openclaw_cli = _real
+    # 4. Repair prompt carries the defect + exact lines + schema.
+    repair = build_receipt_repair_prompt(BAD, "Receipt rejected: bad form",
+                                         case_text, "Q", "S")
+    check("repair-prompt-complete", BAD in repair and "bad form" in repair
+          and "EXACT lines" in repair and "Reply ONCE" in repair
+          and "JSON object" in repair)
 
-print(f"{len(failures)} failures")
-raise SystemExit(1 if failures else 0)
+    # 5. Skill documents exact-lines + ban + null envelope.
+    skill = (ROOT / "openclaw-skills" / "diagnostic" / "SKILL.md"
+             ).read_text(encoding="utf-8")
+    check("skill-exact-lines", "copy-paste" in skill
+          and "EXACT pre-filled" in skill)
+    check("skill-no-prerequisite", "NO" in skill
+          and "cleaned-image prerequisite" in skill)
+    check("skill-null-envelope", '"predicted_class": null' in skill
+          and "NEVER write tool numbers" in skill)
+
+    # 6. Null-claim flows: agent reports nulls, re-execution fills them —
+    # one call, no repair, final numbers from the referee.
+    calls.clear()
+    runner_mod.run_openclaw_cli = _cli_factory(
+        [_envelope(GOOD, cls=None, conf=None)])
+    try:
+        out = run_session(record, case_text, _verify)
+        check("null-claim-filled", out[0].ran is True
+              and out[0].predicted_class == "Melanoma"
+              and out[0].confidence == 0.7 and len(calls) == 1,
+              f"{out} calls={len(calls)}")
+    except Exception as exc:  # noqa: BLE001
+        check("null-claim-filled", False, f"raised: {exc}")
+    finally:
+        runner_mod.run_openclaw_cli = _real
+
+    assert not failures, f"{len(failures)} failures: {failures}"

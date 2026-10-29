@@ -1,6 +1,5 @@
 """Routing retirement checks (plan.tmp T1, stdlib only).
-Run: .venv/bin/python tests/test_routing.py
-Exit non-zero on any failure.
+Run: .venv/bin/python -m pytest tests/test_routing.py
 
 T1 deleted `control.router.route()` and `orchestrator.run_direct_tool`:
 no deterministic code may decide quality/route/tool/stop. This test
@@ -18,72 +17,72 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-failures = []
+def test_routing_checks():
+    failures = []
 
 
-def check(name, cond, detail=""):
-    print(("PASS " if cond else "FAIL ") + name
-          + (f" — {detail}" if detail and not cond else ""))
-    if not cond:
-        failures.append(name)
+    def check(name, cond, detail=""):
+        print(("PASS " if cond else "FAIL ") + name
+              + (f" — {detail}" if detail and not cond else ""))
+        if not cond:
+            failures.append(name)
 
 
-# 1. route() must be gone.
-try:
-    from control.router import route  # noqa: E402,F401
-    check("route-deleted", False, "control.router.route still importable")
-except ImportError:
-    check("route-deleted", True)
+    # 1. route() must be gone.
+    try:
+        from control.router import route  # noqa: E402,F401
+        check("route-deleted", False, "control.router.route still importable")
+    except ImportError:
+        check("route-deleted", True)
 
-# 2. run_direct_tool must be gone.
-try:
-    from orchestrator import run_direct_tool  # noqa: E402,F401
-    check("run_direct_tool-deleted", False,
-          "orchestrator.run_direct_tool still importable")
-except ImportError:
-    check("run_direct_tool-deleted", True)
+    # 2. run_direct_tool must be gone.
+    try:
+        from orchestrator import run_direct_tool  # noqa: E402,F401
+        check("run_direct_tool-deleted", False,
+              "orchestrator.run_direct_tool still importable")
+    except ImportError:
+        check("run_direct_tool-deleted", True)
 
-# 3. Plain wrappers survive for the Quality Agent.
-import control.router as router_mod  # noqa: E402
+    # 3. Plain wrappers survive for the Quality Agent.
+    import control.router as router_mod  # noqa: E402
 
-check("abcde-wrapper-kept", callable(getattr(router_mod, "run_abcde", None)))
-check("preprocess-wrapper-kept",
-      callable(getattr(router_mod, "probe_preprocess", None)))
+    check("abcde-wrapper-kept", callable(getattr(router_mod, "run_abcde", None)))
+    check("preprocess-wrapper-kept",
+          callable(getattr(router_mod, "probe_preprocess", None)))
 
-# 4. No decision call left in the orchestrator: no `route(...)` call
-# with guard/abcde evidence (comments/strings like "careful route"
-# or "No route()" don't count — match the real call shape).
-orch_text = (ROOT / "orchestrator.py").read_text(encoding="utf-8")
-import re as _re
-decision_call = _re.search(r"[=\s]route\s*\(\s*guard", orch_text)
-check("no-route-call-in-orchestrator", decision_call is None,
-      "orchestrator.py still calls route(guard, ...)")
-check("no-route-import-in-orchestrator",
-      _re.search(r"from control\.router import[^\n]*\broute\b(?!_|\w)",
-                 orch_text) is None,
-      "orchestrator.py still imports route")
-check("no-run_direct_tool-in-orchestrator", "run_direct_tool" not in orch_text,
-      "orchestrator.py still references run_direct_tool")
+    # 4. No decision call left in the orchestrator: no `route(...)` call
+    # with guard/abcde evidence (comments/strings like "careful route"
+    # or "No route()" don't count — match the real call shape).
+    orch_text = (ROOT / "orchestrator.py").read_text(encoding="utf-8")
+    import re as _re
+    decision_call = _re.search(r"[=\s]route\s*\(\s*guard", orch_text)
+    check("no-route-call-in-orchestrator", decision_call is None,
+          "orchestrator.py still calls route(guard, ...)")
+    check("no-route-import-in-orchestrator",
+          _re.search(r"from control\.router import[^\n]*\broute\b(?!_|\w)",
+                     orch_text) is None,
+          "orchestrator.py still imports route")
+    check("no-run_direct_tool-in-orchestrator", "run_direct_tool" not in orch_text,
+          "orchestrator.py still references run_direct_tool")
 
-# 5. No screen-path literal left (T1: full path always).
-check("no-screen-path-in-orchestrator",
-      '"screen"' not in orch_text and "'screen'" not in orch_text,
-      "orchestrator.py still mentions a screen path")
+    # 5. No screen-path literal left (T1: full path always).
+    check("no-screen-path-in-orchestrator",
+          '"screen"' not in orch_text and "'screen'" not in orch_text,
+          "orchestrator.py still mentions a screen path")
 
-# 6. The retained wrappers are evidence-only and crash-safe: a missing
-# image yields a plain dict with no route/decision key, never an error.
-missing = "dataset/does_not_exist_xyz.jpg"
-probe = router_mod.probe_preprocess(missing)
-check("preprocess-wrapper-evidence-only",
-      isinstance(probe, dict) and probe.get("improved") is False
-      and "error" in probe and "path" not in probe
-      and "route" not in probe and "decision" not in probe,
-      str(probe))
-abcde = router_mod.run_abcde(missing)
-check("abcde-wrapper-evidence-only",
-      isinstance(abcde, dict) and "risk_band" in abcde
-      and "route" not in abcde and "decision" not in abcde,
-      str(abcde))
+    # 6. The retained wrappers are evidence-only and crash-safe: a missing
+    # image yields a plain dict with no route/decision key, never an error.
+    missing = "dataset/does_not_exist_xyz.jpg"
+    probe = router_mod.probe_preprocess(missing)
+    check("preprocess-wrapper-evidence-only",
+          isinstance(probe, dict) and probe.get("improved") is False
+          and "error" in probe and "path" not in probe
+          and "route" not in probe and "decision" not in probe,
+          str(probe))
+    abcde = router_mod.run_abcde(missing)
+    check("abcde-wrapper-evidence-only",
+          isinstance(abcde, dict) and "risk_band" in abcde
+          and "route" not in abcde and "decision" not in abcde,
+          str(abcde))
 
-print(f"{len(failures)} failures")
-raise SystemExit(1 if failures else 0)
+    assert not failures, f"{len(failures)} failures: {failures}"

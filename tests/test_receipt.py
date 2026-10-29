@@ -15,75 +15,75 @@ from control.manifest import load_manifest  # noqa: E402
 from control.schemas import VerdictEnvelope  # noqa: E402
 from orchestrator import verify_receipt  # noqa: E402
 
-failures = []
+def test_receipt_checks():
+    failures = []
 
 
-def check(name, cond, detail=""):
-    print(("PASS " if cond else "FAIL ") + name
-          + (f" — {detail}" if detail and not cond else ""))
-    if not cond:
-        failures.append(name)
+    def check(name, cond, detail=""):
+        print(("PASS " if cond else "FAIL ") + name
+              + (f" — {detail}" if detail and not cond else ""))
+        if not cond:
+            failures.append(name)
 
 
-manifest = load_manifest(ROOT / "tools" / "manifest.yaml")
-record = {"image_path": "dataset/ISIC2019_test/ISIC_0000000.jpg",
-          "metadata": {}}
-proc = subprocess.run(
-    [sys.executable, "tools/ham10000_cnn.py", "--image",
-     record["image_path"]], capture_output=True, text=True, timeout=300,
-    cwd=str(ROOT))
-actual = json.loads(proc.stdout)
-cls, conf = actual["disease_name"], actual["confidence_score"]
+    manifest = load_manifest(ROOT / "tools" / "manifest.yaml")
+    record = {"image_path": "dataset/ISIC2019_test/ISIC_0000000.jpg",
+              "metadata": {}}
+    proc = subprocess.run(
+        [sys.executable, "tools/ham10000_cnn.py", "--image",
+         record["image_path"]], capture_output=True, text=True, timeout=300,
+        cwd=str(ROOT))
+    actual = json.loads(proc.stdout)
+    cls, conf = actual["disease_name"], actual["confidence_score"]
 
 
-def envelope(confidence):
-    return VerdictEnvelope(
-        ran=True,
-        command="python tools/ham10000_cnn.py --image "
-                "dataset/ISIC2019_test/ISIC_0000000.jpg",
-        exit_code=0, predicted_class=cls, confidence=confidence,
-        reasoning="t", uncertainty_flags=[])
+    def envelope(confidence):
+        return VerdictEnvelope(
+            ran=True,
+            command="python tools/ham10000_cnn.py --image "
+                    "dataset/ISIC2019_test/ISIC_0000000.jpg",
+            exit_code=0, predicted_class=cls, confidence=confidence,
+            reasoning="t", uncertainty_flags=[])
 
 
-exact = verify_receipt(envelope(conf), record, manifest)
-check("exact-keeps-tool-values",
-      exact.ran and exact.predicted_class == cls
-      and exact.confidence == conf and "reliability=exact" in exact.reasoning)
+    exact = verify_receipt(envelope(conf), record, manifest)
+    check("exact-keeps-tool-values",
+          exact.ran and exact.predicted_class == cls
+          and exact.confidence == conf and "reliability=exact" in exact.reasoning)
 
-small = verify_receipt(envelope(round(conf + 0.03, 4)), record, manifest)
-check("small-drift-flagged-not-rejected",
-      small.ran and small.predicted_class == cls
-      and small.confidence == conf
-      and "reliability=rounded" in small.reasoning
-      and "disagreement" in small.uncertainty_flags)
+    small = verify_receipt(envelope(round(conf + 0.03, 4)), record, manifest)
+    check("small-drift-flagged-not-rejected",
+          small.ran and small.predicted_class == cls
+          and small.confidence == conf
+          and "reliability=rounded" in small.reasoning
+          and "disagreement" in small.uncertainty_flags)
 
-big = verify_receipt(envelope(round(min(conf + 0.2, 1.0), 4)), record,
-                     manifest)
-check("fabrication-yields-tool-values",
-      big.ran and big.predicted_class == cls and big.confidence == conf
-      and "reliability=fabricated" in big.reasoning
-      and "disagreement" in big.uncertainty_flags)
+    big = verify_receipt(envelope(round(min(conf + 0.2, 1.0), 4)), record,
+                         manifest)
+    check("fabrication-yields-tool-values",
+          big.ran and big.predicted_class == cls and big.confidence == conf
+          and "reliability=fabricated" in big.reasoning
+          and "disagreement" in big.uncertainty_flags)
 
-omitted = verify_receipt(envelope(None), record, manifest)
-check("omitted-numbers-filled",
-      omitted.ran and omitted.predicted_class == cls
-      and omitted.confidence == conf
-      and "reliability=omitted" in omitted.reasoning)
+    omitted = verify_receipt(envelope(None), record, manifest)
+    check("omitted-numbers-filled",
+          omitted.ran and omitted.predicted_class == cls
+          and omitted.confidence == conf
+          and "reliability=omitted" in omitted.reasoning)
 
-# A command naming a tool the sessions were NOT offered (the VLM tiers) is
-# a hallucinated command, never evidence: it could otherwise vote and pull
-# a 5-6 GB model onto the 8 GB card. Rejected before any execution.
-for excluded_tool in ("tools/vlm_ollama.py", "tools/drdiag_vlm.py",
-                      "tools/quality_gate.py"):
-    bad = VerdictEnvelope(
-        ran=True,
-        command=f"python {excluded_tool} --image "
-                "dataset/ISIC2019_test/ISIC_0000000.jpg",
-        exit_code=0, reasoning="t", uncertainty_flags=[])
-    rejected = verify_receipt(bad, record, manifest)
-    check(f"excluded-tool-rejected:{excluded_tool}",
-          rejected.ran is False and rejected.predicted_class is None
-          and "diagnostic pool" in rejected.reasoning, str(rejected))
+    # A command naming a tool the sessions were NOT offered (the VLM tiers) is
+    # a hallucinated command, never evidence: it could otherwise vote and pull
+    # a 5-6 GB model onto the 8 GB card. Rejected before any execution.
+    for excluded_tool in ("tools/vlm_ollama.py", "tools/drdiag_vlm.py",
+                          "tools/quality_gate.py"):
+        bad = VerdictEnvelope(
+            ran=True,
+            command=f"python {excluded_tool} --image "
+                    "dataset/ISIC2019_test/ISIC_0000000.jpg",
+            exit_code=0, reasoning="t", uncertainty_flags=[])
+        rejected = verify_receipt(bad, record, manifest)
+        check(f"excluded-tool-rejected:{excluded_tool}",
+              rejected.ran is False and rejected.predicted_class is None
+              and "diagnostic pool" in rejected.reasoning, str(rejected))
 
-print(f"{len(failures)} failures")
-raise SystemExit(1 if failures else 0)
+    assert not failures, f"{len(failures)} failures: {failures}"
