@@ -65,6 +65,7 @@ def verify_receipt(
     manifest,  # control.manifest.Manifest
     timeout: int = 300,
     command: str | None = None,
+    runner=None,
 ) -> VerdictEnvelope:
     """Re-execute the claimed command control-side. Self-reported receipts
     are NOT trusted: mismatch => ran=False (no evidence). Only commands
@@ -125,8 +126,9 @@ def verify_receipt(
         # Metadata is re-taken from the record, never from agent text:
         # agents routinely emit unquoted/broken JSON here.
         cmd += ["--metadata", _json.dumps(record.get("metadata", {}))]
+    execute = runner or subprocess.run
     try:
-        proc = subprocess.run(
+        proc = execute(
             cmd, capture_output=True, text=True, timeout=timeout,
             cwd=str(ROOT_DIR),
         )
@@ -199,6 +201,7 @@ def verify_receipts(
     record: dict,
     manifest,  # control.manifest.Manifest
     timeout: int = 300,
+    runner=None,
 ) -> list[VerdictEnvelope]:
     """Receipt EVERY command a session claims, one envelope per tool.
 
@@ -215,13 +218,14 @@ def verify_receipts(
     seen: set[str] = set()
     for cmd in claimed.command_list():
         verdict = verify_receipt(claimed, record, manifest,
-                                 timeout=timeout, command=cmd)
+                                 timeout=timeout, command=cmd, runner=runner)
         tool = receipt_tool(cmd)
         if tool in seen:
             continue
         seen.add(tool)
         out.append(verdict)
-    return out or [verify_receipt(claimed, record, manifest, timeout=timeout)]
+    return out or [verify_receipt(claimed, record, manifest,
+                                  timeout=timeout, runner=runner)]
 
 
 def run_ensemble_verdict(record: dict, timeout: int = 600,

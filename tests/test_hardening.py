@@ -71,8 +71,8 @@ def test_hardening_checks():
           str(single.command_list()))
     multi = env(extra_commands=["python tools/isic_vit.py --image i.jpg",
                                 "python tools/isic_vit.py --image i.jpg"])
-    check("command-list-dedupes",
-          multi.command_list() == [multi.command, 
+    check("command-list-dedupes",              multi.command_list() == [multi.command,
+ 
                                    "python tools/isic_vit.py --image i.jpg"],
           str(multi.command_list()))
 
@@ -351,6 +351,8 @@ def test_hardening_checks():
     # per attempt (the retry targets session-state errors).
     import skin_agent  # noqa: E402
     from skin_agent import is_transient_openclaw_error  # noqa: E402
+    from control.inference_guard import DEFAULT_MAX_ATTEMPTS  # noqa: E402
+
 
     check("retry-not-on-generic-threshold",
           is_transient_openclaw_error("confidence threshold not met") is False)
@@ -390,7 +392,8 @@ def test_hardening_checks():
         skin_agent.find_openclaw_executable = _real_which
     session_ids = [cmd[cmd.index("--session-id") + 1] for cmd in calls]
     check("retry-fresh-session-each-attempt",
-          len(session_ids) == 6 and len(set(session_ids)) == 6,
-          str(session_ids))
+              len(session_ids) == DEFAULT_MAX_ATTEMPTS
+              and len(set(session_ids)) == DEFAULT_MAX_ATTEMPTS,
+              str(session_ids))
 
     assert not failures, f"{len(failures)} failures: {failures}"

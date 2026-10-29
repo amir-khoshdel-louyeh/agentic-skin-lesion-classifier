@@ -22,6 +22,8 @@ from typing import Any, Dict, List
 
 import yaml
 
+from control.inference_guard import InferencePolicy, InferenceTimeout
+
 
 def load_prompt_records(prompt_file: Path) -> List[Dict[str, Any]]:
     if not prompt_file.exists():
@@ -77,13 +79,25 @@ def is_transient_openclaw_error(output: str) -> bool:
 
 
 def run_openclaw_cli(
-    prompt: str, agent_id: str = "main", show_command: bool = True
+    prompt: str,
+    agent_id: str = "main",
+    show_command: bool = True,
+    policy: InferencePolicy | None = None,
 ) -> Dict[str, Any]:
     openclaw_cmd = find_openclaw_executable()
     clean_prompt = " ".join(prompt.strip().split())
+    policy = policy or InferencePolicy.from_env(
+        "OPENCLAW", default_timeout=600.0,
+        default_attempts=3,
+    )
+    deadline = time.monotonic() + policy.max_total_s
 
-    max_retries = 5
-    for attempt in range(max_retries + 1):
+    for attempt in range(policy.max_attempts):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise InferenceTimeout(
+                f"OpenClaw inference budget of {policy.max_total_s:g}s exhausted"
+            )
         # A fresh session per attempt is the whole point of the retry: the
         # errors it targets are session-state errors, so reusing one id
         # would reproduce the failure it is meant to escape.
@@ -118,13 +132,14 @@ def run_openclaw_cli(
                 text=True,
                 encoding="utf-8",
                 errors="replace",
-                timeout=1200,
+                timeout=min(policy.timeout_s, remaining),
                 env=_env,
             )
 
         except subprocess.TimeoutExpired as exc:
-            raise RuntimeError(
-                "OpenClaw CLI timed out after 1200 seconds. "
+            raise InferenceTimeout(
+                "OpenClaw CLI timed out after "
+                f"{min(policy.timeout_s, remaining):g} seconds. "
                 "Ensure the OpenClaw gateway and local tools are running."
             ) from exc
 
@@ -133,8 +148,14 @@ def run_openclaw_cli(
             stdout_text = result.stdout.strip()
             combined = f"{stderr_text}\n{stdout_text}".strip()
 
-            if attempt < max_retries and is_transient_openclaw_error(combined):
-                delay = min(2 ** (attempt + 1), 120)
+            if (attempt + 1 < policy.max_attempts
+                    and is_transient_openclaw_error(combined)):
+                delay = policy.delay_for(attempt)
+                if time.monotonic() + delay >= deadline:
+                    raise InferenceTimeout(
+                        "no OpenClaw retry budget remains after "
+                        f"{attempt + 1} attempts"
+                    )
                 print(
                     f"Transient OpenClaw error detected on attempt "
                     f"{attempt + 1}: {combined}. "
@@ -156,4 +177,6 @@ def run_openclaw_cli(
                 f"OpenClaw CLI returned invalid JSON:\n{result.stdout}"
             ) from exc
 
-    raise RuntimeError("OpenClaw CLI failed after all retry attempts.")
+    raise RuntimeError(
+        f"OpenClaw CLI failed after {policy.max_attempts} attempts."
+    )

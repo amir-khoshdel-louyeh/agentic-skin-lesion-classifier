@@ -16,7 +16,16 @@ import argparse
 import base64
 import json
 import os
+import sys
+import urllib.error
 import urllib.request
+from pathlib import Path
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from control.inference_guard import InferencePolicy, run_with_retries  # noqa: E402
 
 # Nominal confidence for generative verdicts (no logits exist).
 # Kept below every doctor threshold (0.6-0.9) on purpose.
@@ -62,8 +71,19 @@ def extract_class(text: str) -> str | None:
     return None
 
 
+class _TransientOllamaError(RuntimeError):
+    pass
+
+
+def _retryable_http_error(exc: Exception) -> bool:
+    return (isinstance(exc, _TransientOllamaError)
+            or (isinstance(exc, urllib.error.HTTPError)
+                and exc.code in (429, 500, 502, 503, 504)))
+
+
 def chat(model: str, image_b64: str, timeout: int,
-         prompt: str = PROMPT) -> dict:
+         prompt: str = PROMPT,
+         policy: InferencePolicy | None = None) -> dict:
     body = json.dumps({
         "model": model,
         "messages": [{"role": "user", "content": prompt,
@@ -79,8 +99,22 @@ def chat(model: str, image_b64: str, timeout: int,
     req = urllib.request.Request(
         f"{OLLAMA_URL}/api/chat", data=body,
         headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return json.loads(resp.read().decode())
+    policy = policy or InferencePolicy.from_env(
+        "OLLAMA_VLM", default_timeout=float(timeout)
+    )
+
+    def request(limit: float) -> dict:
+        try:
+            with urllib.request.urlopen(req, timeout=limit) as resp:
+                return json.loads(resp.read().decode())
+        except urllib.error.HTTPError as exc:
+            if exc.code in (429, 500, 502, 503, 504):
+                raise _TransientOllamaError(
+                    f"Ollama HTTP {exc.code}: {exc.reason}"
+                ) from exc
+            raise
+
+    return run_with_retries(request, policy, _retryable_http_error)
 
 
 def classify(model: str, image_b64: str, timeout: int) -> tuple[str, str, int]:
