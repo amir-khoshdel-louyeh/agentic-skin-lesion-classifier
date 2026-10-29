@@ -8,6 +8,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
@@ -15,6 +17,7 @@ from control.manifest import load_manifest  # noqa: E402
 from control.schemas import VerdictEnvelope  # noqa: E402
 from orchestrator import verify_receipt  # noqa: E402
 
+@pytest.mark.integration
 def test_receipt_checks():
     failures = []
 

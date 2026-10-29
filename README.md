@@ -14,7 +14,7 @@ A local, agent-orchestrated dermoscopy screening workflow: specialised CNN tools
 | **Tools** | EfficientNet-B0 (fast), EfficientNet-B4 (balanced), ViT-Large, locally trained 28×28 triage CNN, DermAI |
 | **Orchestration** | Quality → brain loop (up to 7 sessions) → critic → specialists → referee |
 | **Outputs** | Structured JSON, confidence, Markdown report with re-executed receipts |
-| **Tests** | 32 pytest tests: 18 converted check suites plus deterministic receipt, inference-guard and end-to-end round cases |
+| **Tests** | 33 pytest tests: 31 fast deterministic tests, 1 checkpoint integration test, 1 opt-in live contract test |
 | **Verified here** | Triage model rebuild and pytest suite pass; receipt and timeout guards are unit-tested; the live LLM round remains inconclusive because the agent did not issue a tool command |
 | **Role** | Solo — agent design, tool contracts, orchestration, reporting |
 
@@ -85,7 +85,7 @@ agentic-skin-lesion-classifier/
 ├── prompts/                 # Locked system prompts and doctor-editable prompts
 ├── openclaw-skills/         # Installed OpenClaw skills
 ├── calibration/             # Per-model calibration profiles
-├── tests/                   # 32 pytest tests (converted check suites + guards)
+├── tests/                   # 31 fast tests + 1 integration + 1 live opt-in
 └── assets/                  # Demo and report screenshots
 ```
 
@@ -128,19 +128,28 @@ The trainer writes `models/derm-cnn/model.py`, `labels.json`, `model.pth`, `cali
 - The local triage checkpoint was rebuilt from **9,087 training / 2,272 held-out validation** images (8 epochs, seed 42): **validation accuracy 0.4124**, fitted temperature **1.1**. Per-class recall ranges from 0.286 (benign keratosis) to 0.824 (vascular lesions); SCC was excluded. These are measurements for this compact rebuild, not the original uncommitted weights.
 - `tools/ham10000_cnn.py --image dataset/ISIC2019_test/ISIC_0000002.jpg` returned `status: success` with `Dermatofibroma` at `confidence_score 0.5594`, proving the label/checkpoint contract now loads.
 - `isic-vit` still has no `models/isic-vit-b16/best.pt`, so only the rebuilt triage CNN is executable; the report does not claim a second-model consensus.
-- `.venv/bin/python -m pytest tests -q` reports **32 passed**. The converted check suites and the deterministic receipt/inference-guard/end-to-end round units run without import-time exits; the two legacy receipt integration checks use the local triage checkpoint.
+- `.venv/bin/python -m pytest tests -q` runs the fast tier and reports **31 passed** (integration and live tests deselected). `RUN_LIVE_TESTS=1 .venv/bin/python -m pytest -m live -q` runs the opt-in live contract test. The checkpoint-backed receipt test uses the local triage checkpoint; no fast test starts a model.
 
 ## Tests
 
-The 18 former standalone check scripts now run as ordinary pytest tests. They no longer execute assertions at import time or raise `SystemExit`, and the suite passes as a single command:
+The 18 former standalone check scripts now run as ordinary pytest tests. They no longer execute assertions at import time or raise `SystemExit`. The default command runs the deterministic fast tier:
 
 ```bash
 .venv/bin/python -m pytest tests -q
 ```
 
-Current coverage is **32 tests**: the 18 converted suites (routing, receipts, critic behaviour, grounding, safety, single-writer numbers, specialists, two-part reports and the rest), six deterministic receipt-verification tests, seven inference timeout/retry tests, and one hermetic end-to-end round test.
+| Tier | Command | Requirements |
+|---|---|---|
+| Fast (default) | `.venv/bin/python -m pytest tests -q` | Python plus `pytest`, `pyyaml`, `pydantic`; no weights or services |
+| Integration | `.venv/bin/python -m pytest tests -q -m integration` | Local triage checkpoint and model runtime |
+| Live | `RUN_LIVE_TESTS=1 .venv/bin/python -m pytest tests -q -m live` | Local checkpoint, OpenClaw/Ollama stack where applicable |
+| All local | `.venv/bin/python -m pytest tests -q -m "not live"` | Fast plus checkpoint integration |
 
-The receipt tests inject a fake tool executor, so they prove deterministically that an agent's claimed tool becomes evidence only after a successful control-side execution. Failed, invalid, mismatched, non-pool or unexecuted commands return `ran=False` with no class or confidence. Two legacy integration checks still execute the local triage checkpoint; the agent-side guard tests use fake CLI/HTTP backends and do not start Ollama or OpenClaw.
+CI (`.github/workflows/tests.yml`) runs the fast tier on Python 3.12 with only `pytest`, `pyyaml` and `pydantic`. The integration and live tiers are explicit local runs because they need model weights and, for live agent traffic, a running OpenClaw/Ollama stack.
+
+Current collection is **33 tests**: 31 fast tests (17 of the 18 converted suites, six deterministic receipt-verification tests, seven inference timeout/retry tests, and one hermetic end-to-end round test), one checkpoint-backed receipt integration test, and one opt-in live contract smoke test.
+
+The receipt tests inject a fake tool executor, so they prove deterministically that an agent's claimed tool becomes evidence only after a successful control-side execution. Failed, invalid, mismatched, non-pool or unexecuted commands return `ran=False` with no class or confidence. The checkpoint-backed receipt integration test executes the local triage checkpoint; the agent-side guard tests use fake CLI/HTTP backends and do not start Ollama or OpenClaw.
 
 ### Inference guards
 
