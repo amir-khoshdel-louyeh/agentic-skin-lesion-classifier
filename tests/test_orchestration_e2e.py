@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 import orchestrator
+from control.artifacts import DEFAULT_MANIFEST, write_manifest
 from control.manifest import load_manifest
 from control.schemas import VerdictEnvelope
 
@@ -45,6 +46,7 @@ def test_run_round_is_hermetic_and_rejects_unreceipted_claims(
     image.write_bytes(b"temporary image")
     image_path = str(image.resolve())
     report_dir = tmp_path / "report"
+    write_manifest(tmp_path / DEFAULT_MANIFEST, tmp_path)
 
     manifest = load_manifest(root / "tools" / "manifest.yaml")
     tool = manifest.by_name("ham10000-cnn")
@@ -196,7 +198,7 @@ def test_run_round_is_hermetic_and_rejects_unreceipted_claims(
     ]
     assert events
     assert {event["run_id"] for event in events} == {audit["run_id"]}
-    assert {"guard", "quality", "brain", "session", "critic",
+    assert {"artifacts", "guard", "quality", "brain", "session", "critic",
             "referee", "round_end"} <= {event["stage"] for event in events}
     assert any(event["stage"] == "referee"
                and event["decision"] == "benign" for event in events)

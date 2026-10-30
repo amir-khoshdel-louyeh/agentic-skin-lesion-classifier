@@ -91,6 +91,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Re-run a round on the careful route (tighter threshold "
         "plus control-side ensemble vote).",
     )
+    parser.add_argument(
+        "--strict-models",
+        action="store_true",
+        help="Fail the round if a manifest-listed model artefact is "
+        "missing; calibration integrity is always enforced.",
+    )
     return parser
 
 
@@ -180,6 +186,7 @@ def main() -> None:
                         prompt_file=str(prompt_path),
                         tool_helper_file=str(tool_helper_path),
                         agent_id=args.agent_id,
+                        strict_models=args.strict_models,
                     )
                     print(f"Round {index} report: {out}")
                 except Exception as exc:
@@ -200,6 +207,7 @@ def main() -> None:
             prompt_file=str(prompt_path),
             tool_helper_file=str(tool_helper_path),
             agent_id=args.agent_id,
+            strict_models=args.strict_models,
         )
         print(f"Round report: {out}")
         return

@@ -14,7 +14,7 @@ A local, agent-orchestrated dermoscopy screening workflow: specialised CNN tools
 | **Tools** | EfficientNet-B0 (fast), EfficientNet-B4 (balanced), ViT-Large, locally trained 28×28 triage CNN, DermAI |
 | **Orchestration** | Quality → brain loop (up to 7 sessions) → critic → specialists → referee |
 | **Outputs** | Structured JSON, confidence, Markdown report with re-executed receipts |
-| **Tests** | 47 pytest tests: 45 fast deterministic tests, 1 checkpoint integration test, 1 opt-in live contract test |
+| **Tests** | 48 pytest tests: 46 fast deterministic tests, 1 checkpoint integration test, 1 opt-in live contract test |
 | **Verified here** | Triage model rebuild and pytest suite pass; receipt and timeout guards are unit-tested; the live LLM round remains inconclusive because the agent did not issue a tool command |
 | **Role** | Solo — agent design, tool contracts, orchestration, reporting |
 
@@ -86,7 +86,7 @@ agentic-skin-lesion-classifier/
 ├── openclaw-skills/         # Installed OpenClaw skills
 ├── calibration/             # Per-model calibration profiles
 ├── artifacts/               # SHA-256 model/calibration manifest
-├── tests/                   # 45 fast tests + 1 integration + 1 live opt-in
+├── tests/                   # 46 fast tests + 1 integration + 1 live opt-in
 └── assets/                  # Demo and report screenshots
 ```
 
@@ -129,7 +129,7 @@ The trainer writes `models/derm-cnn/model.py`, `labels.json`, `model.pth`, `cali
 - The local triage checkpoint was rebuilt from **9,087 training / 2,272 held-out validation** images (8 epochs, seed 42): **validation accuracy 0.4124**, fitted temperature **1.1**. Per-class recall ranges from 0.286 (benign keratosis) to 0.824 (vascular lesions); SCC was excluded. These are measurements for this compact rebuild, not the original uncommitted weights.
 - `tools/ham10000_cnn.py --image dataset/ISIC2019_test/ISIC_0000002.jpg` returned `status: success` with `Dermatofibroma` at `confidence_score 0.5594`, proving the label/checkpoint contract now loads.
 - `isic-vit` still has no `models/isic-vit-b16/best.pt`, so only the rebuilt triage CNN is executable; the report does not claim a second-model consensus.
-- `.venv/bin/python -m pytest tests -q` runs the fast tier and reports **45 passed** (integration and live tests deselected). `RUN_LIVE_TESTS=1 .venv/bin/python -m pytest -m live -q` runs the opt-in live contract test. The checkpoint-backed receipt test uses the local triage checkpoint; no fast test starts a model.
+- `.venv/bin/python -m pytest tests -q` runs the fast tier and reports **46 passed** (integration and live tests deselected). `RUN_LIVE_TESTS=1 .venv/bin/python -m pytest -m live -q` runs the opt-in live contract test. The checkpoint-backed receipt test uses the local triage checkpoint; no fast test starts a model.
 
 ## Tests
 
@@ -148,7 +148,7 @@ The 18 former standalone check scripts now run as ordinary pytest tests. They no
 
 CI (`.github/workflows/tests.yml`) runs the fast tier on Python 3.12 with only `pytest`, `pyyaml` and `pydantic`. The integration and live tiers are explicit local runs because they need model weights and, for live agent traffic, a running OpenClaw/Ollama stack.
 
-Current collection is **47 tests**: 45 fast tests (17 of the 18 converted suites, fourteen deterministic receipt-verification tests, seven inference timeout/retry tests, one hermetic end-to-end round test, two artefact-integrity tests, one dependency-lock test, two adversarial tool-output tests and one observability test), one checkpoint-backed receipt integration test, and one opt-in live contract smoke test.
+Current collection is **48 tests**: 46 fast tests (17 of the 18 converted suites, fourteen deterministic receipt-verification tests, seven inference timeout/retry tests, one hermetic end-to-end round test, three artefact-integrity tests, one dependency-lock test, two adversarial tool-output tests and one observability test), one checkpoint-backed receipt integration test, and one opt-in live contract smoke test.
 
 The receipt tests inject a fake tool executor, so they prove deterministically that an agent's claimed tool becomes evidence only after a successful control-side execution. Failed, invalid, mismatched, non-pool or unexecuted commands return `ran=False` with no class or confidence. Every successful execution also gets a content-addressed ledger entry: `receipt_id`, tool, exit code, duration in milliseconds, and SHA-256 hashes of the exact command, image bytes and stdout. The hash of tool + command + image + stdout + exit code makes the ID stable for identical executions; timing is recorded separately. The report includes the receipt table plus a hash ledger, and `audit.jsonl` carries the same rows under `receipts`.
 
@@ -160,9 +160,10 @@ The checkpoint-backed receipt integration test executes the local triage checkpo
 
 ### Reproducible artefacts and dependencies
 
-`artifacts/manifest.json` is a timestamp-free SHA-256 manifest of every calibration file and every present file under `models/`. Calibration files must match and must all be listed; model files are optional when the manifest is verified without local weights, and `--strict-models` makes them required:
+`artifacts/manifest.json` is a timestamp-free SHA-256 manifest of every calibration file and every present file under `models/`. Every round enforces it before any inference: tampered or missing calibration fails the round, and missing model files are warnings by default. Pass `--strict-models` to `main.py` (or use the verifier below) to make missing model files fatal:
 
 ```bash
+.venv/bin/python main.py --record-index 0 --strict-models
 .venv/bin/python tools/verify_artifacts.py
 .venv/bin/python tools/verify_artifacts.py --strict-models
 .venv/bin/python tools/verify_artifacts.py --write   # regenerate after a deliberate rebuild

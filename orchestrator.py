@@ -17,6 +17,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from agents.runner import run_session
+from control.artifacts import enforce_manifest
 from control.confidence import ENTROPY_ENV
 from control.critic import run_critic
 from control.decide import (RULE_DILEMMA, append_audit, build_report, decide,
@@ -325,11 +326,13 @@ def run_round(
     careful: bool = False,
     on_stage=None,
     receipt_runner=None,
+    strict_models: bool = False,
 ) -> Path:
     """Run one screening round. `on_stage` (optional) receives
     (stage, payload) progress events — quality/brain/session/critic/
     specialists/referee — for live UI avatars. It must never raise: any
     error inside is swallowed so reporting can never break a round."""
+    artifact_check = enforce_manifest(ROOT_DIR, strict_models=strict_models)
     startup_path_check()
     # Physician customization (Phase 8): the doctor's validated thresholds
     # drive the decision — never a hardcoded constant. Invalid doctor files
@@ -379,6 +382,10 @@ def run_round(
             )
         except Exception:
             pass  # observability must never break a round
+
+    _observe("artifacts", checked=artifact_check["checked"],
+             warnings=len(artifact_check["warnings"]),
+             strict_models=strict_models)
 
     # plan.tmp chain step 1 (T2): Quality Agent (LLM thinker) decides
     # pass|cleaned|flagged itself; it never aborts the round. The

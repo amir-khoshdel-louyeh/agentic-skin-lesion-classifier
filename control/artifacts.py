@@ -20,6 +20,10 @@ SCHEMA_VERSION = 1
 DEFAULT_MANIFEST = "artifacts/manifest.json"
 
 
+class ArtifactIntegrityError(RuntimeError):
+    """Raised when a round cannot trust its calibration/model artefacts."""
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with Path(path).open("rb") as handle:
@@ -166,3 +170,23 @@ def verify_manifest(
         "problems": problems,
         "warnings": warnings,
     }
+
+
+def enforce_manifest(
+    root: Path = ROOT_DIR,
+    manifest_path: Path | None = None,
+    *,
+    strict_models: bool = False,
+) -> dict:
+    """Raise before any inference when the artefact check fails."""
+    result = verify_manifest(
+        root,
+        manifest_path,
+        allow_missing_models=not strict_models,
+    )
+    if not result["ok"]:
+        details = "; ".join(result["problems"][:5])
+        raise ArtifactIntegrityError(
+            f"Artefact integrity check failed: {details}"
+        )
+    return result

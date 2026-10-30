@@ -2,9 +2,13 @@
 
 from pathlib import Path
 
+import pytest
+
 from control.artifacts import (
+    ArtifactIntegrityError,
     DEFAULT_MANIFEST,
     build_manifest,
+    enforce_manifest,
     verify_manifest,
     write_manifest,
 )
@@ -62,6 +66,32 @@ def test_artifact_manifest_detects_tampering_and_missing_files(tmp_path):
     missing = verify_manifest(tmp_path, manifest_path)
     assert missing["ok"] is False
     assert any("missing calibration artifact" in p for p in missing["problems"])
+
+
+def test_runtime_gate_blocks_tampering_and_strict_missing_model(tmp_path):
+    (tmp_path / "calibration").mkdir()
+    (tmp_path / "models" / "derm-cnn").mkdir(parents=True)
+    calibration = tmp_path / "calibration" / "demo.json"
+    calibration.write_text('{"tool": "demo"}')
+    model = tmp_path / "models" / "derm-cnn" / "model.pth"
+    model.write_bytes(b"model-bytes")
+    manifest_path = tmp_path / DEFAULT_MANIFEST
+    write_manifest(manifest_path, tmp_path)
+
+    accepted = enforce_manifest(tmp_path, manifest_path, strict_models=True)
+    assert accepted["ok"] is True
+
+    calibration.write_text('{"tool": "tampered"}')
+    with pytest.raises(ArtifactIntegrityError, match="sha256 mismatch"):
+        enforce_manifest(tmp_path, manifest_path, strict_models=False)
+
+    calibration.write_text('{"tool": "demo"}')
+    model.unlink()
+    optional = enforce_manifest(tmp_path, manifest_path, strict_models=False)
+    assert optional["ok"] is True
+    assert optional["warnings"]
+    with pytest.raises(ArtifactIntegrityError, match="missing model artifact"):
+        enforce_manifest(tmp_path, manifest_path, strict_models=True)
 
 
 def test_committed_manifest_covers_current_calibration():
