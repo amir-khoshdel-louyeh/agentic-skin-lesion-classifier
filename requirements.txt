@@ -1,6 +1,6 @@
 # ==============================================================================
 # Versions below were verified on the machine this build was validated on:
-# Python 3.14.8, NVIDIA RTX 5070 Laptop GPU (8 GB), CUDA 13.4, on 2026-10-16.
+# Python 3.14.10, NVIDIA RTX 5070 Laptop GPU (8 GB), CUDA 13.4, on 2026-10-16.
 # Each entry records the exact version that ran ("# verified ..."); the
 # requirement itself is a lower bound, so a newer compatible release is fine.
 #
@@ -54,6 +54,10 @@ requests>=2.31       # verified 2.33.1
 scikit-learn>=1.4    # verified 1.9.1
 pydantic>=2.7        # verified 2.12.5
 pyyaml>=6.0          # verified 6.0.3
+
+# Testing and dependency-lock tooling
+pytest>=8.0          # verified 9.1.1
+packaging>=24        # verified 25.0
 
 # Deliberately absent: timm and albumentations. Both were listed before but no
 # module imports either (models/*/arch.py is plain torch); every model path

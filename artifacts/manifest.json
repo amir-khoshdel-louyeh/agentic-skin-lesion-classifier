@@ -1,0 +1,69 @@
+{
+  "calibration": {
+    "calibration/SUMMARY.md": {
+      "bytes": 2727,
+      "sha256": "beefa733d454c908d231fcc25b07dcaf77c3330bf0be57568810dab1e9633f9d"
+    },
+    "calibration/dermai-b0.json": {
+      "bytes": 5019,
+      "sha256": "92d887e61664026c7fc4098e630a7208463691616333694279f6cda8117b53c0"
+    },
+    "calibration/ensemble-high.json": {
+      "bytes": 4962,
+      "sha256": "9a3e909e4ff8fad21818c9967d4b4a853768f41e922d29cb660aab3cc6cc69d2"
+    },
+    "calibration/ham10000-cnn.json": {
+      "bytes": 4925,
+      "sha256": "292f4d401c20dd9fb4375687232b3d930b7f6c42e574b8b9a0b7d8c03a615023"
+    },
+    "calibration/isic-efficientnet-b4.json": {
+      "bytes": 5038,
+      "sha256": "ecc048051a67943584f8ae620c6fdc11a589cae7b4f36eba9194de333ba1b496"
+    },
+    "calibration/isic-resnet50.json": {
+      "bytes": 5027,
+      "sha256": "b30121d0c45f359de6b57dbec73f5bd617700feba5d28510b170dcd220bef765"
+    },
+    "calibration/isic-vit.json": {
+      "bytes": 4939,
+      "sha256": "d1f2f7d7ca26e6658c84de40f069198a50fb8cebebe52f5b53deaba4a3418dbe"
+    },
+    "calibration/multimodal-fusion.json": {
+      "bytes": 5137,
+      "sha256": "798f8aea422e70a2efe020d016cb77770d6cf6ab2af522337e266586ea761796"
+    },
+    "calibration/skin-lesion-high.json": {
+      "bytes": 4999,
+      "sha256": "fa9ccc0180671c6b1d4388a42e85c97e87491e3c7008b66d203d9c4ce3b5f14a"
+    },
+    "calibration/skin-lesion-mid.json": {
+      "bytes": 5031,
+      "sha256": "eac0a0c4212a98edf2f226cc37c55c5b070d2a42503360086e13a7f2c32ade40"
+    }
+  },
+  "models": {
+    "models/derm-cnn/calibration.json": {
+      "bytes": 53,
+      "sha256": "79a98e3f4bf1a6bd829c92f6c40677eb02b2d752e9eb7d7580db33cc097a37c0"
+    },
+    "models/derm-cnn/labels.json": {
+      "bytes": 102,
+      "sha256": "f4978dbb0b1fa6179ce3746b18608b99ce1fca0d0661f58948463cc643c21019"
+    },
+    "models/derm-cnn/metrics.json": {
+      "bytes": 1088,
+      "sha256": "f1cd6139c5149be59c22e6e246c9f491c72014da5d7d98b8e55b61d9d5716fa4"
+    },
+    "models/derm-cnn/model.pth": {
+      "bytes": 386468,
+      "sha256": "3e36ddbff0bdb786ee3ca2fef1a6c176aab7dd78912487afb98e32d3d3f95629"
+    },
+    "models/derm-cnn/model.py": {
+      "bytes": 1226,
+      "sha256": "1fe7f4ffac42d54924d2422d3906342d7bef2ff49ec3a0e70810097e0c43b617"
+    }
+  },
+  "platform": "linux-x86_64",
+  "python": "3.14.10",
+  "schema_version": 1
+}
