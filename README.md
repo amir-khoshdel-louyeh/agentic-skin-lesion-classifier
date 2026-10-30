@@ -15,7 +15,7 @@ A local, agent-orchestrated dermoscopy screening workflow: specialised CNN tools
 | **Orchestration** | Quality → brain loop (up to 7 sessions) → critic → specialists → referee |
 | **Outputs** | Structured JSON, confidence, Markdown report with re-executed receipts |
 | **Tests** | 49 pytest tests: 47 fast deterministic tests, 1 checkpoint integration test, 1 opt-in live contract test |
-| **Verified here** | 49-test suite passes (47 fast); a bounded live `qwen3:8b` round produced two control-side receipts and a `suspicious` decision (borderline Dermatofibroma 0.5594); no clinical validation |
+| **Verified here** | 49-test suite passes on 2026-11-17, including the checkpoint-backed integration tier and the opt-in live tier; a bounded live `qwen3:8b` round produced two control-side receipts and a `suspicious` decision (borderline Dermatofibroma 0.5594); no clinical validation |
 | **Role** | Solo — agent design, tool contracts, orchestration, reporting |
 
 ## Overview
@@ -152,7 +152,7 @@ CI (`.github/workflows/tests.yml`) runs the fast tier on Python 3.12 with only `
 
 Current collection is **49 tests**: 47 fast tests (17 of the 18 converted suites, fourteen deterministic receipt-verification tests, eight inference timeout/retry/model-override tests, one hermetic end-to-end round test, three artefact-integrity tests, one dependency-lock test, two adversarial tool-output tests and one observability test), one checkpoint-backed receipt integration test, and one opt-in live contract smoke test.
 
-Re-verified on 2026-11-16: `.venv/bin/python -m pytest tests -q` reported **47 passed, 2 deselected**. The checkpoint-backed integration tier and the opt-in live contract tier were not rerun in this pass.
+Re-verified on 2026-11-17: the fast tier reports **47 passed, 2 deselected**; the checkpoint-backed tier (`.venv/bin/python -m pytest tests -q -m integration`) reports **1 passed** in 18.8 s, executing `tools/ham10000_cnn.py` on `ISIC_0000000.jpg` through the local checkpoint, and the opt-in live tier (`RUN_LIVE_TESTS=1 ... -m live`) reports **1 passed** in 5.1 s. OpenClaw 2026.7.1-2 and Ollama `qwen3:8b` are installed, so the live prerequisites are met; nothing here is clinical evidence.
 
 The receipt tests inject a fake tool executor, so they prove deterministically that an agent's claimed tool becomes evidence only after a successful control-side execution. Failed, invalid, mismatched, non-pool or unexecuted commands return `ran=False` with no class or confidence. Every successful execution also gets a content-addressed ledger entry: `receipt_id`, tool, exit code, duration in milliseconds, and SHA-256 hashes of the exact command, image bytes and stdout. The hash of tool + command + image + stdout + exit code makes the ID stable for identical executions; timing is recorded separately. The report includes the receipt table plus a hash ledger, and `audit.jsonl` carries the same rows under `receipts`.
 
