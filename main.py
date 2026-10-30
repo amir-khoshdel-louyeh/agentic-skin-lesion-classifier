@@ -12,6 +12,7 @@ or the grounded post-lock sidecar — never a single mega-prompt.
 """
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -97,6 +98,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Fail the round if a manifest-listed model artefact is "
         "missing; calibration integrity is always enforced.",
     )
+    parser.add_argument(
+        "--agent-model",
+        default=None,
+        help="Per-run OpenClaw model override (e.g. ollama/qwen3:8b).",
+    )
     return parser
 
 
@@ -111,6 +117,8 @@ def resolve(path_str: str) -> Path:
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
+    if args.agent_model:
+        os.environ["SKIN_AGENT_MODEL"] = args.agent_model
     if args.doctor_check:
         from control.prompts import doctor_check
 

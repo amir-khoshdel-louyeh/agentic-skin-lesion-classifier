@@ -186,6 +186,34 @@ def test_openclaw_transient_retries_use_fresh_bounded_sessions(monkeypatch):
     assert DEFAULT_MAX_ATTEMPTS == 3
 
 
+def test_openclaw_model_override_is_forwarded(monkeypatch):
+    commands = []
+    monkeypatch.setattr(skin_agent, "find_openclaw_executable",
+                        lambda: "openclaw")
+
+    def run(cmd, **kwargs):
+        commands.append(cmd)
+        return type("Ok", (), {
+            "returncode": 0,
+            "stdout": json.dumps({"payloads": [{"text": "ok"}]}),
+            "stderr": "",
+        })()
+
+    monkeypatch.setattr(skin_agent.subprocess, "run", run)
+    policy = InferencePolicy(timeout_s=5, max_attempts=1, max_total_s=5)
+
+    skin_agent.run_openclaw_cli(
+        "hello", model="ollama/qwen3:8b", show_command=False,
+        policy=policy,
+    )
+    assert commands[0][commands[0].index("--model") + 1] == "ollama/qwen3:8b"
+
+    commands.clear()
+    monkeypatch.setenv("SKIN_AGENT_MODEL", "ollama/qwen3:8b")
+    skin_agent.run_openclaw_cli("hello", show_command=False, policy=policy)
+    assert commands[0][commands[0].index("--model") + 1] == "ollama/qwen3:8b"
+
+
 def test_vlm_ollama_retries_429_and_stops_at_attempt_cap(monkeypatch):
     attempts = []
     response = type("Response", (), {

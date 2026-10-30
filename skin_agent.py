@@ -13,6 +13,7 @@ local OpenClaw agent.
 """
 
 import json
+import os
 import shutil
 import subprocess
 import time
@@ -83,9 +84,11 @@ def run_openclaw_cli(
     agent_id: str = "main",
     show_command: bool = True,
     policy: InferencePolicy | None = None,
+    model: str | None = None,
 ) -> Dict[str, Any]:
     openclaw_cmd = find_openclaw_executable()
     clean_prompt = " ".join(prompt.strip().split())
+    model = model or os.environ.get("SKIN_AGENT_MODEL") or None
     policy = policy or InferencePolicy.from_env(
         "OPENCLAW", default_timeout=600.0,
         default_attempts=3,
@@ -107,6 +110,10 @@ def run_openclaw_cli(
             "agent",
             "--agent",
             agent_id,
+        ]
+        if model:
+            command += ["--model", model]
+        command += [
             "--local",
             "--session-id",
             current_session_id,
@@ -120,9 +127,7 @@ def run_openclaw_cli(
             print("Command:", " ".join(command))
 
         try:
-            import os as _os
-
-            _env = dict(_os.environ)
+            _env = dict(os.environ)
             # Sequential GPU schedule (§5): do not keep the agent LLM
             # resident while PyTorch tools load. Best-effort only.
             _env.setdefault("OLLAMA_KEEP_ALIVE", "0")
