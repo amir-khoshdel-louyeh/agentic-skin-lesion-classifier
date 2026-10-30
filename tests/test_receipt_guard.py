@@ -116,7 +116,7 @@ def test_failed_or_invalid_execution_never_becomes_evidence(harness):
     )
     assert invalid.ran is False
     assert invalid.confidence is None
-    assert "no JSON" in invalid.reasoning
+    assert "invalid tool JSON" in invalid.reasoning
 
 
 def test_image_mismatch_is_rejected_before_execution(harness):

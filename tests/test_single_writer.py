@@ -83,7 +83,7 @@ def test_single_writer_checks():
     # 4. Careful-path extra vote is single-writer by construction: built from
     # the tool payload it just ran, never from agent text.
     fn = orch_text.split("def run_ensemble_verdict")[1].split("\ndef ")[0]
-    check("ensemble-from-payload", "ToolResult.model_validate" in fn
+    check("ensemble-from-payload", "parse_tool_json" in fn
           and "payload.disease_name" in fn and "claimed" not in fn)
 
     assert not failures, f"{len(failures)} failures: {failures}"

@@ -220,6 +220,8 @@ def build_report(
             lines.append(f"- Backend: {provenance['backend']}")
         if provenance.get("started_at"):
             lines.append(f"- Round started: {provenance['started_at']}")
+        if provenance.get("run_id"):
+            lines.append(f"- Run id: {provenance['run_id']}")
     lines += [
         "",
         "## Part A — Decision source (machine, authoritative)",

@@ -188,3 +188,19 @@ def test_run_round_is_hermetic_and_rejects_unreceipted_claims(
 
     emitted = [stage for stage, _payload in stages]
     assert {"quality", "brain", "session", "critic", "referee"} <= set(emitted)
+
+    event_path = tmp_path / "report" / "events.jsonl"
+    events = [
+        json.loads(line)
+        for line in event_path.read_text(encoding="utf-8").splitlines()
+    ]
+    assert events
+    assert {event["run_id"] for event in events} == {audit["run_id"]}
+    assert {"guard", "quality", "brain", "session", "critic",
+            "referee", "round_end"} <= {event["stage"] for event in events}
+    assert any(event["stage"] == "referee"
+               and event["decision"] == "benign" for event in events)
+    assert all({"event_id", "run_id", "ts", "stage", "status"}
+               <= set(event) for event in events)
+    assert not any("steer" in event for event in events)
+    assert f"- Run id: {audit['run_id']}" in report

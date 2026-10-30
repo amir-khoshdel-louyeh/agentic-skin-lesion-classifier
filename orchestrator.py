@@ -34,9 +34,10 @@ from control.prompts import effective_thresholds
 from control.quality import (QUALITY_TOOLKIT, gate_cite, quality_binds,
                              quality_line, resolve_cleaned_image,
                              run_quality)
+from control.observability import append_event, event, new_run_id
 from control.router import run_abcde
-from control.schemas import ToolResult, VerdictEnvelope
-from pydantic import ValidationError
+from control.schemas import VerdictEnvelope
+from control.tooljson import parse_tool_json
 
 
 def file_sha256(path) -> str:
@@ -157,13 +158,8 @@ def verify_receipt(
                         f"{proc.stderr.strip()[-300:]}",
                         exit_code=proc.returncode, duration_ms=duration_ms)
     try:
-        raw_payload = _json.loads(proc.stdout)
-    except (ValueError, TypeError):
-        return rejected("re-execution produced no JSON",
-                        exit_code=proc.returncode, duration_ms=duration_ms)
-    try:
-        actual = ToolResult.model_validate(raw_payload)
-    except ValidationError as exc:
+        actual = parse_tool_json(proc.stdout)
+    except (ValueError, TypeError) as exc:
         return rejected(f"invalid tool JSON: {str(exc)[:300]}",
                         exit_code=proc.returncode, duration_ms=duration_ms)
     if actual.status != "success":
@@ -297,8 +293,8 @@ def run_ensemble_verdict(record: dict, timeout: int = 600,
     if proc.returncode != 0:
         return None
     try:
-        payload = ToolResult.model_validate(_json.loads(proc.stdout))
-    except (ValidationError, ValueError, TypeError):
+        payload = parse_tool_json(proc.stdout)
+    except (ValueError, TypeError):
         return None
     if (payload.status != "success" or payload.disease_name is None
             or payload.confidence_score is None):
@@ -362,6 +358,8 @@ def run_round(
 
     import time as _time
     timings: dict[str, float] = {}
+    _round_t0 = _time.perf_counter()
+    run_id = new_run_id()
 
     def _emit(stage: str, payload: dict | None = None) -> None:
         if on_stage is None:
@@ -372,6 +370,16 @@ def run_round(
         except Exception:
             pass  # progress reporting must never break a round
 
+    def _observe(stage: str, status: str = "ok", **fields) -> None:
+        try:
+            append_event(
+                event(run_id, stage, status=status,
+                      record_index=record_index, **fields),
+                root=ROOT_DIR,
+            )
+        except Exception:
+            pass  # observability must never break a round
+
     # plan.tmp chain step 1 (T2): Quality Agent (LLM thinker) decides
     # pass|cleaned|flagged itself; it never aborts the round. The
     # deterministic control-side gate runs FIRST so its numbers can be
@@ -381,6 +389,8 @@ def run_round(
     _t0 = _time.perf_counter()
     guard = run_guard(str(record.get("image_path")))
     timings["guard_s"] = round(_time.perf_counter() - _t0, 2)
+    _observe("guard", duration_s=timings["guard_s"],
+             passed=guard["passed"], flags=len(guard.get("flags", [])))
     _t0 = _time.perf_counter()
     # Same pre-rendered EXACT lines the diagnostic sessions get: the real
     # case image (and preprocess's --output) already filled in, so the
@@ -391,9 +401,14 @@ def run_round(
     timings["quality_s"] = round(_time.perf_counter() - _t0, 2)
     _emit("quality", {"verdict": quality.get("verdict"),
                       "reasons": quality.get("reasons", [])})
+    _observe("quality", duration_s=timings["quality_s"],
+             verdict=quality.get("verdict"),
+             cleaned=bool(quality.get("cleaned_image")))
     _t0 = _time.perf_counter()
     abcde = run_abcde(str(record.get("image_path")))
     timings["abcde_s"] = round(_time.perf_counter() - _t0, 2)
+    _observe("abcde", duration_s=timings["abcde_s"],
+             risk_band=abcde.get("risk_band", ""))
     route_info = {"path": "full",
                   "reasons": ["deterministic routing retired (T1); "
                               "full path always"],
@@ -449,6 +464,7 @@ def run_round(
         "backend": (f"openclaw agent={agent_id} "
                     "(model id not exposed by the CLI)"),
         "started_at": started_at,
+        "run_id": run_id,
     }
     verdicts: list = []
     steers: list[dict] = []
@@ -469,12 +485,17 @@ def run_round(
                         "suggested_subset": order.get(
                             "suggested_subset", []),
                         "why": order.get("why", "")})
+        _observe("brain", session=session_no,
+                 stop=bool(order.get("stop")),
+                 suggested=len(order.get("suggested_subset", [])))
+        _session_t0 = _time.perf_counter()
         verified_list = run_session(
             dict(active_record), diag_manifest_text,
             lambda c: verify_receipts(c, active_record, manifest,
                                      runner=receipt_runner),
             agent_id=agent_id, quality_text=quality_text,
             steer=order["steer"], hint=order["suggested_subset"])
+        session_s = round(_time.perf_counter() - _session_t0, 3)
         llm_sessions += 1
         verdicts.extend(verified_list)
         # One row per tool receipted; the session's headline verdict is the
@@ -487,6 +508,11 @@ def run_round(
                           "class": primary.predicted_class,
                           "confidence": primary.confidence,
                           "tools_run": tools_text})
+        _observe("session", duration_s=session_s, n=session_no,
+                 tools=len(verified_list),
+                 receipts=sum(1 for v in verified_list if v.receipt_id),
+                 class_name=primary.predicted_class,
+                 confidence=primary.confidence)
         brain_history.append(receipt_summary(
             verified_list, session_no, tools=tools_text))
         sessions_log.append({
@@ -554,6 +580,8 @@ def run_round(
     timings["critic_s"] = round(_time.perf_counter() - _t0, 2)
     _emit("critic", {"sustained": critic_sustained,
                      "reasons": critic_reasons})
+    _observe("critic", duration_s=timings["critic_s"],
+             sustained=critic_sustained, reasons=len(critic_reasons))
 
     # Specialists run on disagreement only (plan.tmp T7): the trigger is
     # code counting (≥2 distinct countable classes, top-2 by re-executed
@@ -590,6 +618,8 @@ def run_round(
                              "countable": any(v.is_countable()
                                               for v in confined)})
     timings["specialists_s"] = round(_time.perf_counter() - _t0, 2)
+    _observe("specialists", duration_s=timings["specialists_s"],
+             triggered=bool(diseases), shortlist=len(diseases))
     verdicts.extend(specialist_verdicts)
 
     decision = decide(verdicts, borderline_threshold=borderline_threshold,
@@ -612,6 +642,9 @@ def run_round(
     _emit("referee", {"decision": decision["decision"],
                        "reason": decision["reason"],
                        "rule": decision.get("rule", "unknown")})
+    _observe("referee", decision=decision["decision"],
+             rule=decision.get("rule", "unknown"),
+             counted=decision.get("verdicts_counted", 0))
     specialist_texts = [
         {"disease": v.predicted_class, "reasoning": v.reasoning}
         for v in specialist_verdicts if v.is_countable()
@@ -634,6 +667,7 @@ def run_round(
     out.write_text(report, encoding="utf-8")
     append_audit({
         "event": "round",
+        "run_id": run_id,
         "record_index": record_index,
         "image": record.get("image_path"),
         "provenance": provenance,
@@ -664,6 +698,10 @@ def run_round(
         "report": out.name,
         "thresholds": thresholds,
     })
+    _observe("round_end", duration_s=round(_time.perf_counter() - _round_t0, 3),
+             decision=decision["decision"], rule=decision.get("rule"),
+             receipts=sum(1 for v in verdicts if v.receipt_id),
+             report=out.name)
     ping(f"Round {record_index} complete: {decision['decision']} ({out.name})",
          level="info")
     return out

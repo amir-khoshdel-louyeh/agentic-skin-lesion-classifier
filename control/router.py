@@ -9,14 +9,11 @@ never a path.
 
 from __future__ import annotations
 
-import json
 import subprocess
 import sys
 
-from pydantic import ValidationError
-
 from control.paths import ROOT_DIR, resolve
-from control.schemas import ToolResult
+from control.tooljson import parse_tool_json
 
 
 def run_abcde(image: str) -> dict:
@@ -38,8 +35,8 @@ def run_abcde(image: str) -> dict:
         return {"risk_band": "", "score": None, "flags": ["tool_failed"],
                 "error": proc.stderr.strip()[-200:]}
     try:
-        payload = ToolResult.model_validate(json.loads(proc.stdout))
-    except (ValidationError, ValueError, TypeError) as exc:
+        payload = parse_tool_json(proc.stdout)
+    except (ValueError, TypeError) as exc:
         return {"risk_band": "", "score": None, "flags": ["tool_failed"],
                 "error": f"invalid tool JSON: {str(exc)[:200]}"}
     if payload.status != "success":
@@ -86,8 +83,8 @@ def probe_preprocess(image: str, timeout: int = 300) -> dict:
                 return {"hair_pixels": 0, "improved": False,
                         "error": proc.stderr.strip()[-200:] or "exit!=0"}
             try:
-                payload = ToolResult.model_validate(json.loads(proc.stdout))
-            except (ValidationError, ValueError, TypeError) as exc:
+                payload = parse_tool_json(proc.stdout)
+            except (ValueError, TypeError) as exc:
                 return {"hair_pixels": 0, "improved": False,
                         "error": f"invalid tool JSON: {str(exc)[:200]}"}
             if payload.status != "success":
