@@ -15,7 +15,7 @@ A local, agent-orchestrated dermoscopy screening workflow: specialised CNN tools
 | **Orchestration** | Quality → brain loop (up to 7 sessions) → critic → specialists → referee |
 | **Outputs** | Structured JSON, confidence, Markdown report with re-executed receipts |
 | **Tests** | 49 pytest tests: 47 fast deterministic tests, 1 checkpoint integration test, 1 opt-in live contract test |
-| **Verified here** | Triage model rebuild and pytest suite pass; receipt and timeout guards are unit-tested; the live LLM round remains inconclusive because the agent did not issue a tool command |
+| **Verified here** | 49-test suite passes (47 fast); a bounded live `qwen3:8b` round produced two control-side receipts and a `suspicious` decision (borderline Dermatofibroma 0.5594); no clinical validation |
 | **Role** | Solo — agent design, tool contracts, orchestration, reporting |
 
 ## Overview
@@ -127,6 +127,7 @@ The trainer writes `models/derm-cnn/model.py`, `labels.json`, `model.pth`, `cali
 - `tools/quality_gate.py --image dataset/ISIC2019_test/ISIC_0000000.jpg` returned `status: success` with `blur_variance 58.21`, `mean_brightness 146.01`, `clipped_fraction 0.0044`, and the `blurry` uncertainty flag.
 - The first round completed in 4m38s on `ISIC_0000002.jpg` (quality pass: blur variance 484.86, mean brightness 150.6, clipped fraction 0.0109) and wrote `report/round_0_20261113_165727.md` plus `audit.jsonl`. A later round wrote `report/round_0_20261113_171943.md` after five sessions, but the agent issued no tool command, so both rounds returned `inconclusive — no receipted verdicts`.
 - A rerun with `qwen2.5-coder:14b` reached the 700-second timeout without producing a new report; that model was too slow for the full seven-session loop in this environment.
+- A bounded live round on 2026-11-16 with `--agent-model ollama/qwen3:8b` completed in **132 s** (11 LLM sessions). Control re-executed `ham10000_cnn` twice with a stable receipt (`7937135c…`) and filled `Dermatofibroma` **0.5594**; the referee returned **suspicious** because the verdict was below the 0.75 borderline threshold. `isic_vit` failed because its checkpoint is absent. Report: `report/round_0_20261116_100225.md`. The model wrote numbers into its envelope despite the omit instruction; Part A used only receipt-derived values.
 - The local triage checkpoint was rebuilt from **9,087 training / 2,272 held-out validation** images (8 epochs, seed 42): **validation accuracy 0.4124**, fitted temperature **1.1**. Per-class recall ranges from 0.286 (benign keratosis) to 0.824 (vascular lesions); SCC was excluded. These are measurements for this compact rebuild, not the original uncommitted weights.
 - `tools/ham10000_cnn.py --image dataset/ISIC2019_test/ISIC_0000002.jpg` returned `status: success` with `Dermatofibroma` at `confidence_score 0.5594`, proving the label/checkpoint contract now loads.
 - `isic-vit` still has no `models/isic-vit-b16/best.pt`, so only the rebuilt triage CNN is executable; the report does not claim a second-model consensus.
